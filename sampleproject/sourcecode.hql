@@ -5,7 +5,7 @@ create external table orders (
   order_status string
 ) row format delimited fields terminated by ','
 location '/user/srikanth/daily_revenue/orders';
-
+--this is a second external table
 create external table order_items (
   order_item_id int,
   order_item_order_id int,
