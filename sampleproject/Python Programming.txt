@@ -1,0 +1,2721 @@
+//python-spark-wordcount.py
+for i in sc.textFile("/public/randomtextwriter/part-m-00000"). \
+flatMap(lambda rec: rec.split(" ")). \
+map(lambda rec: (rec, 1)). \
+reduceByKey(lambda total, value: total + value). \
+take(100):
+  print(i)
+
+--python-spark-daily-revenue.py
+
+# base directory of retail_db and output path are passed as arguments
+# spark-submit daily_revenue.py /Users/srikanth/Research/data/retail_db /Users/srikanth/Research/revenue_per_day --master local
+
+from pyspark import SparkContext, SparkConf
+import sys
+
+conf = SparkConf().setAppName("Daily Revenue").setMaster("local")
+sc = SparkContext(conf=conf)
+
+orders = sc.textFile(sys.argv[1] + "/orders")
+ordersFiltered = orders.filter(lambda rec: rec.split(",")[3] == "COMPLETE" or rec.split(",")[3] == "CLOSED")
+ordersFilteredMap = ordersFiltered.map(lambda rec: (int(rec.split(",")[0]), rec.split(",")[1]))
+
+orderItems = sc.textFile(sys.argv[1] + "/order_items")
+orderItemsMap = orderItems.map(lambda rec: (int(rec.split(",")[1]), float(rec.split(",")[4])))
+ordersJoin = ordersFilteredMap.join(orderItemsMap)
+ordersJoinMap = ordersJoin.map(lambda rec: rec[1])
+
+ordersJoinMap = ordersJoin.map(lambda rec: rec[1])
+orderRevenuePerDay = ordersJoinMap.reduceByKey(lambda agg, val: agg + val)
+
+orderRevenuePerDay.\
+map(lambda rec: rec[0] + "\t" + str(rec[1])).\
+saveAsTextFile(sys.argv[2])
+
+--pyspark-topnproducts.py
+
+def topNProducts(rec, topN):
+  x = [ ]
+  x = list(sorted(rec, key=lambda k: float(k.split(",")[4]), reverse=True))
+  import itertools
+  return (y for y in list(itertools.islice(x, 0, topN)))
+
+products = sc.textFile("/public/retail_db/products")
+productsFiltered = products.filter(lambda rec: rec.split(",")[4] != "")
+
+for i in productsFiltered.\
+map(lambda rec: (int(rec.split(",")[1]), rec)).\
+groupByKey().\
+flatMap(lambda rec: topNProducts(rec[1], 5)).\
+collect():
+  print(i)
+  
+--pyspark-topnpricesproducts.py
+
+def getTopDenseN(rec, topN):
+  topNPricedProducts = [ ]
+  topNPrices = [ ]
+  prodPrices = [ ]
+  prodPricesDesc = [ ]
+  #10 records in rec
+  for i in rec:
+    prodPrices.append(float(i.split(",")[4]))
+  #prodPrices will have only prices from the 10 records
+  prodPricesDesc = list(sorted(set(prodPrices), reverse=True))
+  #prodPricesDesc will have all unique product prices in descending order
+  import itertools
+  topNPrices = list(itertools.islice(prodPricesDesc, 0, topN))
+  #topNPrices will have unique topN prices
+  for j in sorted(rec, key=lambda k: float(k.split(",")[4]), reverse=True):
+    if(float(j.split(",")[4]) in topNPrices):
+      topNPricedProducts.append(j)
+  #topNPricedProducts will have all the products which have the price matching one of topNPrices
+  #simulates dense rank functionality
+  return (y for y in topNPricedProducts)
+
+products = sc.textFile("/public/retail_db/products")
+productsFiltered = products.filter(lambda rec: rec.split(",")[4] != "")
+
+for i in productsFiltered.\
+map(lambda rec: (int(rec.split(",")[1]), rec)).\
+groupByKey().\
+flatMap(lambda rec: getTopDenseN(rec[1], 5)).\
+collect():
+  print(i)
+  
+--python_dataframes_dict.py
+import pandas as pd
+data = {'order_id' : [1, 2],
+  'order_date' : ['2014-01-01 00:00:00', '2014-01-01 00:00:00'],
+  'order_customer_id' : [1, 1],
+  'order_status' : ['COMPLETE', 'CLOSED']
+}
+
+df = pd.DataFrame(data, columns = ['order_id', 'order_date', 'order_customer_id', 'order_status'])
+
+#Accessing by column
+df.order_id
+
+#Accessing by row index
+df.iloc[[1]]
+
+#Setting index
+df1 = df.set_index(df.order_id)
+
+--python_dataframes_csv.py
+
+import pandas as pd
+
+orders = pd.read_csv('/Users/itversity/Research/data/retail_db/orders/part-00000', 
+            names=['order_id', 'order_date', 'order_customer_id', 'order_status'],
+            index_col='order_id')
+orders.groupby(['order_status'])['order_status'].count()
+
+order_items = pd.read_csv('/Users/itversity/Research/data/retail_db/order_items/part-00000', 
+            names=['order_item_id', 'order_item_order_id', 'order_item_product_id',
+                   'order_item_quantity', 'order_item_subtotal', 'order_item_product_price'],
+            index_col='order_item_order_id')
+
+ordersCompleted = orders.loc[(orders['order_status'] == 'COMPLETE') | (orders['order_status'] == 'CLOSED')]
+ordersCompleted.join(order_items).groupby(['order_date'])['order_item_subtotal'].sum()
+
+--python_dataframes_sql.py
+import pandas as pd
+import pandasql as pdsql
+
+pysql = lambda q: pdsql.sqldf(q, globals())
+
+orders = pd.read_csv('/Users/itversity/Research/data/retail_db/orders/part-00000', 
+            names=['order_id', 'order_date', 'order_customer_id', 'order_status'],
+            index_col='order_id')
+
+order_items = pd.read_csv('/Users/itversity/Research/data/retail_db/order_items/part-00000', 
+            names=['order_item_id', 'order_item_order_id', 'order_item_product_id',
+                   'order_item_quantity', 'order_item_subtotal', 'order_item_product_price'],
+index_col='order_item_order_id')
+
+revenue_per_day_sql = """select o.order_date, sum(oi.order_item_subtotal) daily_revenue 
+from orders o join order_items oi on o.order_id = oi.order_item_order_id
+where o.order_status in ('COMPLETE', 'CLOSED')
+group by o.order_date
+order by o.order_date"""
+
+revenue_per_day = pysql(revenue_per_day_sql)
+
+--python_mysql.py
+import mysql.connector, datetime
+from mysql.connector import errorcode
+
+try:
+    cnx = mysql.connector.connect(user='retail_dba', password='itversity',
+                                  host='nn01.itversity.com',
+                                  database='retail_db')
+
+    cursor = cnx.cursor()
+    query = ("select * from orders limit 10")
+    cursor.execute(query)
+
+    for i in cursor:
+        print(i)
+
+    query = ("select * from orders where order_date = %s")
+    order_date = datetime.date(2014, 1, 1)
+
+    cursor.execute(query, (order_date,))
+
+    for i in cursor:
+        print(i)
+
+    cursor.close()
+
+except mysql.connector.Error as err:
+  if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+    print("Something is wrong with your user name or password")
+  elif err.errno == errorcode.ER_BAD_DB_ERROR:
+    print("Database does not exist")
+  else:
+    print(err)
+else:
+  cnx.close()
+  
+--python-pandas-reading-from-files.py
+
+import pandas as pd
+
+results = pd.read_csv("/Users/itversity/Research/data/elections/ls2014.tsv", delimiter="\t")
+
+--pyspark-word-count.py
+inputPath = "/Users/itversity/Research/data/wordcount.txt" or inputPath = "/public/randomtextwriter/part-m-00000"
+outputPath = "/Users/itversity/Research/data/wordcount" or outputPath = "/user/srikanth/wordcount"
+//Make sure outputPath does not exist for this example
+
+for i in sc.textFile(inputPath).\
+flatMap(lambda l: l.split(" ")).\
+map(lambda w: (w, 1)).\
+reduceByKey(lambda t, e: t + e).\
+take(100):
+    print(i)
+
+//Saving to file
+sc.textFile(inputPath).\
+flatMap(lambda l: l.split(" ")).\
+map(lambda w: (w, 1)).\
+reduceByKey(lambda t, e: t + e).\
+saveAsTextFile(outputPath)
+
+--pyspark-conf-and-context.py
+from pyspark import SparkConf,SparkContext
+
+conf = SparkConf().setAppName("Spark Demo").setMaster("local")
+sc = SparkContext(conf=conf)
+
+--pyspark-rdd-parallelize.py
+data = range(1, 1000000)
+dataRDD = sc.parallelize(data)
+
+dataRDD.reduce(lambda acc, value: acc + value)
+
+--pyspark-actions-preview-data.py
+path = "/public/retail_db" or path = "/Users/itversity/Research/data/retail_db"
+
+rdd = sc.textFile(path + "/orders")
+rdd.first()
+rdd.take(10)
+rdd.collect()
+for i in rdd.take(10): print(i)
+for i in rdd.take(10): print(i.split(",")[0] + "\t" + i.split(",")[1])
+
+--pyspark-actions-transformations.py
+path = "/public/retail_db" or path = "/Users/itversity/Research/data/retail_db"
+rdd = sc.textFile(path + "/orders")
+rdd.reduce(lambda agg, ele: 
+  agg if(int(agg.split(",")[2]) < int(ele.split(",")[2])) else ele
+  )
+rdd.top(2)
+for i in rdd.takeOrdered(5, lambda x: -int(x.split(",")[2])): print(i)
+
+--pyspark-transformations-mapping.py
+
+orders = sc.textFile("/public/retail_db/orders") // On the lab accessing HDFS
+orders = sc.textFile("/Users/itversity/Research/data/retail_db/orders") // Accessing locally on the PC
+// Change to valid path as per your preference. Make sure the directory orders exist in the path (locally or on HDFS)
+for i in orders.take(10): foreach(println)
+
+completedOrders = orders.filter(lambda rec: rec.split(",")[3] == "COMPLETE")
+pendingOrders = orders.\
+filter(lambda o:
+  ("PENDING" in o.split(",")[3] or o.split(",")[3] == "PROCESSING") and "2013-08" in o.split(",")[1]
+)
+
+orderDates = completedOrders.map(lambda rec: (int(rec.split(",")[0]), rec.split(",")[1]))
+
+lines = ["Hello World", 
+  "In this case we are trying to understand", 
+  "the purpose of flatMap", 
+  "flatMap is a function which will apply transformation", 
+  "if the transformation results in array, it will flatten out array as individual records", 
+  "let us also understand difference between map and flatMap", 
+  "in case of map, it take one record and return one record after applying transformation", 
+  "even if the transformation result in an array", 
+  "where as in case of flatMap, it might return one or more records", 
+  "if the transformation of 1 record result an array of 1000 records, ", 
+  "then flatMap returns 1000 records"]
+linesRDD = sc.parallelize(lines)
+words = linesRDD.flatMap(lambda rec: rec.split(" "))
+for i in words.collect(): print(i)
+
+--pyspark-aggregations.py
+
+path = "/Users/itversity/Research/data/retail_db" or path = "/public/retail_db"
+
+orderItems = sc.textFile(path + "/order_items").\
+map(lambda orderItem: (int(orderItem.split(",")[1]), float(orderItem.split(",")[4])))
+
+// Compute revenue for each order
+for i in orderItems.\
+reduceByKey(lambda total, orderItemSubtotal: total + orderItemSubtotal).\
+take(100):
+  print(i)
+
+// Compute revenue and number of items for each order using aggregateByKey
+for i in orderItems.\
+aggregateByKey((0.0, 0),
+    lambda iTotal, oisubtotal:  (iTotal[0] + oisubtotal, iTotal[1] + 1),
+    lambda fTotal, iTotal: (fTotal[0] + iTotal[0], fTotal[1] + iTotal[1])
+  ).\
+take(100):
+  print(i)
+
+// Compute revenue and number of items for each order using reduceByKey
+for i in sc.textFile(path + "/order_items").\
+map(lambda orderItem: (int(orderItem.split(",")[1]), (float(orderItem.split(",")[4]), 1))).\
+reduceByKey(lambda total, element: (total[0] + element[0], total[1] + element[1])).\
+take(100):
+  print(i)
+
+--pyspark-minpricedproductbycategory.py
+
+path = "/public/retail_db"
+products = sc.textFile(path + "/products")
+
+minPricedProductsByCategory = products.\
+filter(lambda product: product.split(",")[4] != "").\
+map(lambda p:
+  (int(p.split(",")[1]), p)
+).\
+reduceByKey(lambda agg, product:
+  agg if(float(agg.split(",")[4]) < float(product.split(",")[4])) else product
+).\
+map(lambda rec: rec[1])
+
+for i in minPricedProductsByCategory.collect(): print(i)
+
+--pyspak-join-operations.py
+
+path = "/public/retail_db" or path = "/Users/itversity/Research/data/retail_db"
+
+orders = sc.textFile(path + "/orders").\
+map(lambda rec: (int(rec.split(",")[0]), rec))
+
+orderItems = sc.textFile(path + "/order_items").\
+map(lambda rec: (int(rec.split(",")[1]), rec))
+
+ordersJoin = orders.join(orderItems)
+for i in ordersJoin.take(10): print(i)
+
+ordersLeftOuter = orders.leftOuterJoin(orderItems)
+for i in ordersLeftOuter.filter(lambda rec: rec[1][1] == None).take(10): print(i)
+for i in ordersLeftOuter.\
+filter(lambda rec: rec[1][1] == None).\
+map(lambda rec: rec[1][0]).\
+take(10):
+  print(i)
+
+ordersCogroup = orders.cogroup(orderItems)
+for i in ordersCogroup.take(10): print(i)
+
+a = sc.parallelize(range(1, 10))
+b = sc.parallelize(["Hello", "World"])
+for i in a.cartesian(b): print(i)
+
+--pyspark-set-operations.py
+
+
+path = "/public/retail_db" or path = "/Users/itversity/Research/data/retail_db"
+
+orders201312 = sc.textFile(path + "/orders").\
+filter(lambda order: "2013-12" in order.split(",")[1]).\
+map(lambda order: (int(order.split(",")[0]), order.split(",")[1]))
+
+orderItems = sc.textFile(path + "/order_items").\
+map(lambda rec: (int(rec.split(",")[1]), int(rec.split(",")[2])))
+
+distinctProducts201312 = orders201312.\
+join(orderItems).\
+map(lambda order: order[1][1]).\
+distinct()
+
+orders201401 = sc.textFile(path + "/orders").\
+filter(lambda order: "2014-01" in order.split(",")[1]).\
+map(lambda order: (int(order.split(",")[0]), order.split(",")[1]))
+
+products201312 = orders201312.\
+join(orderItems).\
+map(lambda order: order[1][1])
+
+products201401 = orders201401.\
+join(orderItems).\
+map(lambda order: order[1][1])
+
+products201312.union(products201401).count()
+products201312.union(products201401).distinct().count()
+
+products201312.intersection(products201401).count()
+
+--pyspark-bykey-sorting-and-ranking.py
+
+path = "/Users/itversity/Research/data/retail_db" or path = "/public/retail_db"
+
+orders = sc.textFile(path + "/orders")
+
+// orders sorted by status
+for i in orders.\
+map(lambda o:
+  (o.split(",")[3], o)
+).\
+sortByKey().\
+map(lambda o: o[1]).\
+take(100):
+  print(i)
+
+// orders sorted by status and date in descending order
+for i in orders.\
+map(lambda o:
+  ((o.split(",")[3], o.split(",")[1]), o)
+).\
+sortByKey(False).\
+map(lambda o: o[1]).\
+take(100):
+  print(i)
+
+// let us get top 5 products in each category from products
+products = sc.textFile(path + "/products")
+productsGroupByCategory = products.\
+filter(lambda product: product.split(",")[4] != "").\
+map(lambda p:
+    (int(p.split(",")[1]), p)
+).\
+groupByKey()
+
+for i in productsGroupByCategory.\
+sortByKey().\
+flatMap(lambda rec:
+    sorted(list(rec[1]), key=lambda k: -float(k.split(",")[4]))[0:5]
+).\
+take(100):
+  print(i)
+
+--pyspark-groupByKey-denserank.py
+
+path = "/Users/itversity/Research/data/retail_db" or path = "/public/retail_db"
+
+products = sc.textFile(path + "/products")
+
+productsGroupByCategory = products.\
+filter(lambda product: product.split(",")[4] != "").\
+map(lambda p:
+    (int(p.split(",")[1]), p)
+).\
+groupByKey()
+
+//Exploring Python APIs to get top 5 priced products
+i = productsGroupByCategory.first()[1]
+l = list(i)
+
+topNPrices = list(set(sorted(map(lambda rec: float(rec.split(",")[4]), l), key=lambda k: -k)))[0:5]
+
+l_sorted = sorted(l, key=lambda k: -float(k.split(",")[4]))
+for i in filter(lambda k: float(k.split(",")[4]) in topNPrices, l_sorted):
+  print(i)
+
+def topN(l, topN):
+    recs = sorted(list(l[1]), key=lambda k: -float(k.split(",")[4]))
+    topNPrices = list(set(sorted(map(lambda rec: float(rec.split(",")[4]), recs), key=lambda k: -k)))[0:topN]
+    topNRecs = filter(lambda k: float(k.split(",")[4]) in topNPrices, recs)
+    return (x for x in topNRecs)
+    
+
+//Getting top 5 priced products using Spark and Scala
+for i in productsGroupByCategory.flatMap(lambda rec: topN(rec, 5)).\
+collect():
+    print(i)
+
+--pyspark-wordcount-ide.py
+import sys
+try:
+    from pyspark import SparkConf, SparkContext
+
+    conf = SparkConf().setAppName("Word Count").setMaster("local")
+    sc = SparkContext(conf=conf)
+    inputPath = sys.argv[1]
+    outputPath = sys.argv[2]
+
+    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    Configuration = sc._gateway.jvm.org.apache.hadoop.conf.Configuration
+
+    fs = FileSystem.get(Configuration())
+
+    if(fs.exists(Path(inputPath)) == False):
+        print("Input path does not exists")
+    else:
+        if(fs.exists(Path(outputPath))):
+            fs.delete(Path(outputPath), True)
+        sc.textFile(inputPath). \
+            flatMap(lambda l: l.split(" ")). \
+            map(lambda w: (w, 1)). \
+            reduceByKey(lambda t, e: t + e). \
+            saveAsTextFile(outputPath)
+
+    print ("Successfully imported Spark Modules")
+
+except ImportError as e:
+    print ("Can not import Spark Modules", e)
+    sys.exit(1)
+
+--pyspark-word-count-config.py
+
+import sys
+import ConfigParser as cp
+try:
+    from pyspark import SparkConf, SparkContext
+
+    props = cp.RawConfigParser()
+    props.read("src/main/resources/application.properties")
+
+    conf = SparkConf().setAppName("Word Count").setMaster(props.get(sys.argv[3], "executionMode"))
+    sc = SparkContext(conf=conf)
+    inputPath = sys.argv[1]
+    outputPath = sys.argv[2]
+
+    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    Configuration = sc._gateway.jvm.org.apache.hadoop.conf.Configuration
+
+    fs = FileSystem.get(Configuration())
+
+    if(fs.exists(Path(inputPath)) == False):
+        print("Input path does not exists")
+    else:
+        if(fs.exists(Path(outputPath))):
+            fs.delete(Path(outputPath), True)
+        sc.textFile(inputPath). \
+            flatMap(lambda l: l.split(" ")). \
+            map(lambda w: (w, 1)). \
+            reduceByKey(lambda t, e: t + e). \
+            saveAsTextFile(outputPath)
+
+    print ("Successfully imported Spark Modules")
+
+except ImportError as e:
+    print ("Can not import Spark Modules", e)
+    sys.exit(1)
+
+--spark-submit-python-wordcount-local-standalone.sh
+
+spark-submit src/main/python/WordCount.py \
+  /Users/itversity/Research/data/wordcount.txt \
+  /Users/itversity/Research/data/wordcount \
+  dev
+
+--spark-submit-python-wordcount-yarn.sh
+spark-submit \
+  --master yarn \
+  --conf spark.ui.port=54312 \
+  src/main/python/WordCount.py \
+  /public/randomtextwriter/part-m-00000 \
+  /user/srikanth/wordcount \
+  prod
+
+--pyspark-application.properties  
+[dev]
+executionMode = local
+
+[prod]
+executionMode = yarn-client
+
+--spark-submit-wordcount-pyspark-yarn-custom-capacity.sh
+spark-submit \
+  --num-executors 10 \
+  --executor-memory 3584M \
+  --executor-cores 4 \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  src/main/python/wordcount/WordCount.py \
+  /public/randomtextwriter /user/srikanth/wordcount prod
+  
+ --spark-submit-wordcount-pyspark-yarn-custom-capacity.sh
+
+spark-submit \
+  --num-executors 10 \
+  --executor-memory 3584M \
+  --executor-cores 4 \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  src/main/python/wordcount/WordCount.py \
+  /public/randomtextwriter /user/srikanth/wordcount prod
+
+--pyspark-dataframes-operations-totalrevenueperday.py
+
+import sys
+import ConfigParser as cp
+try:
+    from pyspark import SparkConf, SparkContext
+    from pyspark.sql import SQLContext, Row, functions as func
+
+    props = cp.RawConfigParser()
+    props.read("src/main/resources/application.properties")
+
+    conf = SparkConf().setAppName("Total Revenue Per Day").setMaster("local")
+    sc = SparkContext(conf=conf)
+    sqlContext = SQLContext(sc)
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+    inputPath = sys.argv[1]
+    outputPath = sys.argv[2]
+
+    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    Configuration = sc._gateway.jvm.org.apache.hadoop.conf.Configuration
+
+    fs = FileSystem.get(Configuration())
+
+    if(fs.exists(Path(inputPath)) == False):
+        print("Input path does not exists")
+    else:
+        if(fs.exists(Path(outputPath))):
+            fs.delete(Path(outputPath), True)
+        ordersDF = sc.textFile(inputPath + "/orders"). \
+        map(lambda rec:
+          Row(order_id=int(rec.split(",")[0]), 
+              order_date=rec.split(",")[1],
+              order_customer_id=int(rec.split(",")[2]), 
+              order_status=rec.split(",")[3])
+        ).toDF()
+        orderItemsDF = sc.textFile(inputPath + "/order_items"). \
+            map(lambda rec:
+            Row(order_item_id=int(rec.split(",")[0]), 
+                order_item_order_id=int(rec.split(",")[1]),
+                order_item_product_id=int(rec.split(",")[2]), 
+                order_item_quantity=int(rec.split(",")[3]),
+                order_item_subtotal=float(rec.split(",")[4]), 
+                order_item_product_price=float(rec.split(",")[5]))
+        ).toDF()
+
+        ordersFiltered = ordersDF. \
+            filter(ordersDF["order_status"] == "COMPLETE")
+        ordersJoin = ordersFiltered. \
+        join(orderItemsDF, 
+             ordersFiltered["order_id"] == orderItemsDF["order_item_order_id"])
+
+        ordersJoin. \
+        groupBy(ordersJoin["order_date"]). \
+        agg(func.sum(ordersJoin["order_item_subtotal"])). \
+        sort(ordersJoin["order_date"]). \
+        rdd. \
+        saveAsTextFile(outputPath)
+
+    print ("Successfully imported Spark Modules")
+
+except ImportError as e:
+    print ("Can not import Spark Modules", e)
+sys.exit(1)
+
+--python-spark-submit-totalrevenuedaily.sh
+
+spark-submit \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  src/main/python/retail/dataframes/TotalRevenuePerDay.py \
+  /public/retail_db /user/dgadiraju/totalrevenuedaily prod
+
+--pyspark-sql-import.py
+    from pyspark import SparkConf, SparkContext
+    from pyspark.sql import SQLContext, Row, functions as func
+--pyspark-sql-create-spark-context.py
+    conf = SparkConf().setAppName("Total Revenue Per Day").setMaster("local")
+
+    sc = SparkContext(conf=conf)
+--pyspark-sql-create-sql-context.py
+sqlContext = SQLContext(sc)
+sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+
+--pyspark-create-data-frame.py
+ordersDF = sc.textFile(inputPath + "/orders"). \
+map(lambda rec:
+  Row(order_id=int(rec.split(",")[0]),
+      order_date=rec.split(",")[1],
+      order_customer_id=int(rec.split(",")[2]),
+      order_status=rec.split(",")[3])
+).toDF()
+--pyspark-few-dataframe-operations.py
+
+ordersFiltered = ordersDF. \
+    filter(ordersDF["order_status"] == "COMPLETE")
+ordersFiltered.printSchema()
+ordersFiltered.show()
+ordersFiltered.select("order_id").show()
+
+--pyspark-dataframes-sql-native.py
+# Register DF as temp table
+ordersDF.registerTempTable("orders")
+
+# Run query
+sqlContext.sql("select * from orders where order_status = 'COMPLETE' limit 10").show()
+
+-- pyspark-dataframes-operations-totalrevenueperdaysql.py
+import sys
+import ConfigParser as cp
+try:
+    from pyspark import SparkConf, SparkContext
+    from pyspark.sql import SQLContext, Row, functions as func
+
+    props = cp.RawConfigParser()
+    props.read("src/main/resources/application.properties")
+
+    conf = SparkConf().setAppName("Total Revenue Per Day").setMaster(props.get(sys.argv[3], "executionMode"))
+
+    sc = SparkContext(conf=conf)
+    sqlContext = SQLContext(sc)
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+    inputPath = sys.argv[1]
+    outputPath = sys.argv[2]
+
+    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    Configuration = sc._gateway.jvm.org.apache.hadoop.conf.Configuration
+
+    fs = FileSystem.get(Configuration())
+
+    if(fs.exists(Path(inputPath)) == False):
+        print("Input path does not exists")
+    else:
+        if(fs.exists(Path(outputPath))):
+            fs.delete(Path(outputPath), True)
+        ordersDF = sc.textFile(inputPath + "/orders"). \
+        map(lambda rec:
+          Row(order_id=int(rec.split(",")[0]),
+              order_date=rec.split(",")[1],
+              order_customer_id=int(rec.split(",")[2]),
+              order_status=rec.split(",")[3])
+        ).toDF()
+        ordersDF.registerTempTable("orders")
+
+        orderItemsDF = sc.textFile(inputPath + "/order_items"). \
+            map(lambda rec:
+            Row(order_item_id=int(rec.split(",")[0]),
+                order_item_order_id=int(rec.split(",")[1]),
+                order_item_product_id=int(rec.split(",")[2]),
+                order_item_quantity=int(rec.split(",")[3]),
+                order_item_subtotal=float(rec.split(",")[4]),
+                order_item_product_price=float(rec.split(",")[5]))
+        ).toDF()
+        orderItemsDF.registerTempTable("order_items")
+
+        sql = """select o.order_date, sum(oi.order_item_subtotal) daily_revenue
+        from orders o join order_items oi 
+        on o.order_id = oi.order_item_order_id
+        where o.order_status = 'COMPLETE' 
+        group by o.order_date 
+        order by o.order_date"""
+
+        totalRevenueDaily = sqlContext.sql(sql)
+
+        totalRevenueDaily.rdd. \
+            map(lambda rec: rec["order_date"] + "\t" + str(rec["daily_revenue"])). \
+            saveAsTextFile(outputPath)
+
+    print ("Successfully imported Spark Modules")
+
+except ImportError as e:
+    print ("Can not import Spark Modules", e)
+sys.exit(1)
+
+--spark-submit-python-totalrevenuedaily.sh
+
+spark-submit \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  src/main/python/retail/dataframes/TotalRevenuePerDaySQL.py \
+/public/retail_db /user/dgadiraju/totalrevenuedaily prod
+
+--pyspark-sql-hive-context.py
+# from pyspark.sql import HiveContext
+# sqlContext = new HiveContext(sc);
+sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+sqlContext.sql("use sparkdemo")
+
+sql = """select o.order_date, sum(oi.order_item_subtotal) daily_revenue
+        from orders o join order_items oi 
+        on o.order_id = oi.order_item_order_id
+        where o.order_status = 'COMPLETE' 
+        group by o.order_date 
+        order by o.order_date"""
+
+sqlContext.sql(sql).show()
+
+sqlContext.sql("create table daily_revenue(order_date string, daily_revenue float)")
+
+i = "insert into daily_revenue " + sql
+sqlContext.sql(i)
+
+sqlContext.sql("select * from daily_revenue").show()
+
+--pyspark-cardcountbysuit.py
+# Make sure you do not have directory used for output path
+# hadoop fs -rm -R /user/dgadiraju/cardcountbysuit
+inputPath = "/public/cards/largedeck.txt"
+outputPath = "/user/dgadiraju/cardcountbysuit"
+
+sc.textFile(inputPath). \
+  map(lambda card: (card.split("|")[1], 1)). \
+  reduceByKey(lambda total, card: total + card). \
+  saveAsTextFile(outputPath)
+  
+--pyspark-cardcountbysuit-numtasks.py
+
+# Make sure you do not have directory used for output path
+# hadoop fs -rm -R /user/dgadiraju/cardcountbysuit
+inputPath = "/public/cards/largedeck.txt"
+outputPath = "/user/dgadiraju/cardcountbysuit"
+
+# Only 1 file will be created and 1 task will be used in second stage.
+sc.textFile(inputPath). \
+  map(lambda card: (card.split("|")[1], 1)). \
+  reduceByKey(lambda total, card: total + card, 1). \
+  saveAsTextFile(outputPath)
+  
+--pyspark-wordcount-numtasks.py
+inputPath = "/public/randomtextwriter/part-m-0000*"
+outputPath = "/user/dgadiraju/wordcount"
+
+# Ideal number of tasks could be 4 while processing 1 file
+sc.textFile(inputPath). \
+  flatMap(lambda rec: rec.split(" ")). \
+  map(lambda rec: (rec, 1)). \
+  reduceByKey(lambda total, agg: total + agg, 10). \
+  saveAsTextFile(outputPath)  
+
+--pyspark-wordcount-coalesce.py
+# Make sure you do not have directory used for output path
+path = "/Users/itversity/Research/data/wordcount.txt" or path = "/public/randomtextwriter/part-m-00000"
+
+lines = sc.textFile(path)
+lines_coalesce =   lines.coalesce(5) # with out coalesce it will try to use 9 tasks in first stage
+words = lines.flatMap(lambda rec: rec.split(" "))
+tuples = words.map(lambda rec: (rec, 1))
+wordByCount = tuples.reduceByKey(lambda total, agg: total + agg)
+wbcCoalesce = wordByCount.coalesce(2) # second stage will use only 2 tasks
+
+for i in wbcCoalesce.take(100):
+  print(i)
+  
+--pyspark-wordcount-mapPartitions.py
+path = "/Users/itversity/Research/data/wordcount.txt" or path = "/public/randomtextwriter/part-m-00000"
+
+def getTuples(lines):
+    tuples = [ ]
+    for line in lines:
+        for i in line.split(" "):
+            tuples.append((i, 1))
+    return tuples
+
+for i in sc.textFile(path). \
+    mapPartitions(lambda lines: getTuples(lines)). \
+    reduceByKey(lambda t, e: t + e). \
+    take(100):
+    print(i)
+	
+--pyspark-RevenuePerProductForMonth.py
+
+import sys
+import ConfigParser as cp
+try:
+    from pyspark import SparkConf, SparkContext
+    from pyspark.sql import SQLContext, Row, functions as func
+
+    props = cp.RawConfigParser()
+    props.read("src/main/resources/application.properties")
+
+    conf = SparkConf(). \
+    setAppName("Total Revenue Per Day"). \
+    setMaster(props.get(sys.argv[5], "executionMode"))
+
+    sc = SparkContext(conf=conf)
+    inputPath = sys.argv[1]
+    outputPath = sys.argv[2]
+    month = sys.argv[3]
+
+    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    Configuration = sc._gateway.jvm.org.apache.hadoop.conf.Configuration
+
+    fs = FileSystem.get(Configuration())
+
+    if(fs.exists(Path(inputPath)) == False):
+        print("Input path does not exists")
+    else:
+        if(fs.exists(Path(outputPath))):
+            fs.delete(Path(outputPath), True)
+
+        # Filter for orders which fall in the month passed as argument
+        orders = inputPath + "/orders"
+        ordersFiltered = sc.textFile(orders). \
+        filter(lambda order: month in order.split(",")[1]). \
+        map(lambda order: (int(order.split(",")[0]), 1))
+
+        # Join filtered orders and order_items to get order_item details for a given month
+        # Get revenue for each product_id
+
+        orderItems = inputPath + "/order_items"
+        revenueByProductId = sc.textFile(orderItems). \
+            map(lambda orderItem:
+                (int(orderItem.split(",")[1]), 
+                 (int(orderItem.split(",")[2]), float(orderItem.split(",")[4])
+                ))
+            ). \
+            join(ordersFiltered). \
+            map(lambda rec: rec[1][0]). \
+            reduceByKey(lambda total, ele: total + ele)
+
+        # We need to read products from local file system
+        localPath = sys.argv[4]
+        productsFile = open(localPath + "/products/part-00000")
+        products = productsFile.read().splitlines()
+
+        # Convert into RDD and extract product_id and product_name
+        # Join it with aggregated order_items (product_id, revenue)
+        # Get product_name and revenue for each product
+        sc.parallelize(products). \
+            map(lambda product: 
+                (int(product.split(",")[0]), product.split(",")[2])). \
+        join(revenueByProductId). \
+        map(lambda rec: rec[1][0] + "\t" + str(rec[1][1])). \
+        saveAsTextFile(outputPath)
+
+        print ("Successfully imported Spark Modules")
+
+except ImportError as e:
+    print ("Can not import Spark Modules", e)
+sys.exit(1)
+
+--spark-submit-python-revenueperproductformonth.sh
+
+spark-submit \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  src/main/python/retail/RevenuePerProductForMonth.py \
+  /public/retail_db /user/dgadiraju/revenueperproductformonth \
+  2013-12 /data/retail_db prod
+  
+--pyspark-RevenuePerProductForMonthAccumulator.py
+
+import sys
+import ConfigParser as cp
+try:
+    from pyspark import SparkConf, SparkContext
+    from pyspark.sql import SQLContext, Row, functions as func
+
+    props = cp.RawConfigParser()
+    props.read("src/main/resources/application.properties")
+
+    conf = SparkConf(). \
+    setAppName("Total Revenue Per Day"). \
+    setMaster(props.get(sys.argv[5], "executionMode"))
+
+    sc = SparkContext(conf=conf)
+    inputPath = sys.argv[1]
+    outputPath = sys.argv[2]
+    month = sys.argv[3]
+
+    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    Configuration = sc._gateway.jvm.org.apache.hadoop.conf.Configuration
+
+    fs = FileSystem.get(Configuration())
+
+    if(fs.exists(Path(inputPath)) == False):
+        print("Input path does not exists")
+    else:
+        if(fs.exists(Path(outputPath))):
+            fs.delete(Path(outputPath), True)
+
+        # Filter for orders which fall in the month passed as argument
+        ordersCount = sc.accumulator(0)
+        orders = inputPath + "/orders"
+
+        def getOrdersTuples(rec):
+            ordersCount.add(1)
+            return (int(rec.split(",")[0]), 1)
+        ordersFiltered = sc.textFile(orders). \
+        filter(lambda order: month in order.split(",")[1]). \
+        map(getOrdersTuples)
+
+        # Join filtered orders and order_items to get order_item details for a given month
+        # Get revenue for each product_id
+        orderItemsCount = sc.accumulator(0)
+        orderItems = inputPath + "/order_items"
+
+        def getProductIdAndRevenue(rec):
+            orderItemsCount.add(1)
+            return rec[1][0]
+
+        revenueByProductId = sc.textFile(orderItems). \
+            map(lambda orderItem:
+                (int(orderItem.split(",")[1]), 
+                 (int(orderItem.split(",")[2]), float(orderItem.split(",")[4])
+                ))
+            ). \
+            join(ordersFiltered). \
+            map(getProductIdAndRevenue). \
+            reduceByKey(lambda total, ele: total + ele)
+
+        # We need to read products from local file system
+        localPath = sys.argv[4]
+        productsFile = open(localPath + "/products/part-00000")
+        products = productsFile.read().splitlines()
+
+        # Convert into RDD and extract product_id and product_name
+        # Join it with aggregated order_items (product_id, revenue)
+        # Get product_name and revenue for each product
+        sc.parallelize(products). \
+            map(lambda product: 
+                (int(product.split(",")[0]), product.split(",")[2])). \
+        join(revenueByProductId). \
+        map(lambda rec: rec[1][0] + "\t" + str(rec[1][1])). \
+        saveAsTextFile(outputPath)
+        
+        # We can see the details of accumulators after performing action
+        # We typically stored this data into database
+        print(ordersCount)
+        print(orderItemsCount)
+except ImportError as e:
+    print ("Can not import Spark Modules", e)
+sys.exit(1)
+
+--spark-submit-python-revenueperproductformonthaccumulator.sh
+
+spark-submit \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  src/main/python/retail/RevenuePerProductForMonthAccumulator.py \
+  /public/retail_db /user/dgadiraju/revenueperproductformonth \
+2013-12 /data/retail_db prod
+
+--pyspark-RevenuePerProductForMonthBroadcast.py
+
+import sys
+import ConfigParser as cp
+try:
+    from pyspark import SparkConf, SparkContext
+    from pyspark.sql import SQLContext, Row, functions as func
+
+    props = cp.RawConfigParser()
+    props.read("src/main/resources/application.properties")
+
+    conf = SparkConf(). \
+    setAppName("Total Revenue Per Day"). \
+    setMaster(props.get(sys.argv[5], "executionMode"))
+
+    sc = SparkContext(conf=conf)
+    inputPath = sys.argv[1]
+    outputPath = sys.argv[2]
+    month = sys.argv[3]
+
+    Path = sc._gateway.jvm.org.apache.hadoop.fs.Path
+    FileSystem = sc._gateway.jvm.org.apache.hadoop.fs.FileSystem
+    Configuration = sc._gateway.jvm.org.apache.hadoop.conf.Configuration
+
+    fs = FileSystem.get(Configuration())
+
+    if(fs.exists(Path(inputPath)) == False):
+        print("Input path does not exists")
+    else:
+        if(fs.exists(Path(outputPath))):
+            fs.delete(Path(outputPath), True)
+
+        # Filter for orders which fall in the month passed as argument
+        ordersCount = sc.accumulator(0)
+        orders = inputPath + "/orders"
+
+        def getOrdersTuples(rec):
+            ordersCount.add(1)
+            return (int(rec.split(",")[0]), 1)
+        
+        ordersFiltered = sc.textFile(orders). \
+        filter(lambda order: month in order.split(",")[1]). \
+        map(getOrdersTuples)
+
+        # Join filtered orders and order_items to get order_item details for a given month
+        # Get revenue for each product_id
+        orderItemsCount = sc.accumulator(0)
+        orderItems = inputPath + "/order_items"
+
+        def getProductIdAndRevenue(rec):
+            orderItemsCount.add(1)
+            return rec[1][0]
+        
+        revenueByProductId = sc.textFile(orderItems). \
+            map(lambda orderItem:
+                (int(orderItem.split(",")[1]), 
+                 (int(orderItem.split(",")[2]), float(orderItem.split(",")[4])
+                ))
+            ). \
+            join(ordersFiltered). \
+            map(getProductIdAndRevenue). \
+            reduceByKey(lambda total, ele: total + ele)
+
+        # We need to read products from local file system
+        localPath = sys.argv[4]
+        productsFile = open(localPath + "/products/part-00000")
+        products = productsFile.read().splitlines()
+
+        # Extract product_id and product_name and create dict of it
+        # Broadcast the dict
+        productsDict = dict(
+            map(lambda product:
+                (int(product.split(",")[0]), product.split(",")[2]), products)
+        )
+        bv = sc.broadcast(productsDict)
+
+        # Get product name for each product id in revenueByProductId
+        # by looking up in the broadcast variable
+
+        revenueByProductId. \
+        map(lambda product: bv.value[product[0]] + "\t" + str(product[1])). \
+        saveAsTextFile(outputPath)
+
+except ImportError as e:
+    print ("Can not import Spark Modules", e)
+sys.exit(1)
+
+--spark-submit-python-revenueperproductformonthbroadcast.sh
+
+spark-submit \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  src/main/python/retail/RevenuePerProductForMonthBroadcast.py \
+  /public/retail_db /user/dgadiraju/revenueperproductformonth \
+2013-12 /data/retail_db prod
+
+--if-else-example.py
+#if-statements
+var=10
+var1=0
+if var:
+    print("Value of var is "+str(var))
+if var1:
+    print("Value of var1 is " +str(var1))
+
+#if-else statements
+if var1:
+    print("Value of var1 is not equal to zero")
+else:
+    print("Value of var1 is equal to zero")
+
+#Nested-if
+if var<50:
+    print("Value of var is less than 50")
+    if var==30:
+        print("Which is 30")
+    elif var==10:
+        print("Which is 10")
+    else:
+        print("Which is not either 10 or 20")
+elif var>50:
+    print("Value of var is more than 50")
+else:
+    print("Couldn't find value of var")
+	
+--loops-example.py
+
+# Prints out 0,1,2,3,4 using while loop
+
+count = 0
+while True:
+    print(count)
+    count += 1
+    if count >= 5:
+        break
+# Prints out only even numbers - 2,4,6,8,10 using for loop
+
+for x in range(10):
+    # Check if x is even
+    if not x % 2 == 0:
+        continue
+    print(x)
+#nested loop----printing prime numbers less than 100
+
+i=2
+while(i<100):
+    j=2
+    while(j<=(i/j)):
+        if not (i%j): break
+        j=j+1
+    if(j> (i/j)): print(str(i)+" is prime")
+    i=i+1
+
+#difference between continue and pass--printing elements of list
+
+a=[0,1,2,3]
+for ele in a:
+    if not ele:
+        pass
+    print(ele)
+print("------")
+for ele in a:
+    if not ele:
+        continue
+    print(ele)
+	
+--exceptions-example.py
+
+#copy one at a time
+1/0 #throws ZeroDivisionError
+4 + x*5 #throws NameError
+2 + '2' #throws TypeError
+
+--handling-exception-example.py
+while True:
+     try:
+         x = int(input("Please enter a number: "))
+         break
+     except ValueError:
+         print("Oops!  That was no valid number.  Try again...")
+     except (RuntimeError, TypeError, NameError):
+         pass
+		 
+--exceptions-finally-example.py
+
+while True:
+     try:
+         x = int(input("Please enter a number: "))
+         break
+     except ValueError:
+         print("Oops!  That was no valid number.  Try again...")
+     except (RuntimeError, TypeError, NameError):
+         pass
+     finally:
+         print('Executing finally')
+		 
+--pycon-2017-demo.py
+
+#Get revenue for given order_id, by adding order_item_subtotal from order_items
+#Read data from local file system /data/retail_db/order_items/part-00000
+orderItems = open("/data/retail_db/order_items/part-00000").read().splitline()
+
+orderItemsFiltered = filter(lambda s: int(s.split(",")[1]) == 5, orderItems)
+orderItemsMap = map(lambda s: float(s.split(",")[4]), orderItemsFiltered)
+orderRevenue = reduce(lambda totalRevenue, itemRevenue: totalRevenue + itemRevenue, orderItemsMap)
+orderMinSubtotal = reduce(lambda minRevenue, itemRevenue: minRevenue if(minRevenue < itemRevenue) else itemRevenue, orderItemsMap)
+
+orders = sc.textFile("/public/retail_db/orders")
+for i in orders.take(10): print(i)
+
+orderItems = sc.textFile("/public/retail_db/order_items")
+for i in orderItems.take(10): print(i)
+
+for i in orders.\
+map(lambda s: s.split(",")[3]).\
+distinct().collect(): 
+  print(i)
+
+ordersFiltered = orders.\
+filter(lambda s: s.split(",")[3] == "COMPLETE" or s.split(",")[3] == "CLOSED")
+
+ordersFilteredMap = ordersFiltered.\
+map(lambda o: (int(o.split(",")[0]), o.split(",")[1]))
+orderItemsMap = orderItems.\
+map(lambda o: (int(o.split(",")[1]), float(o.split(",")[4])))
+ordersJoin = ordersFilteredMap.join(orderItemsMap)
+ordersJoinMap = ordersJoin.map(lambda t: t[1])
+dailyRevenue = ordersJoinMap.\
+reduceByKey(lambda totalRevenue, orderItemRevenue: totalRevenue + orderItemRevenue)
+
+dailyRevenueSorted = dailyRevenue.sortByKey()
+
+for i in dailyRevenueSorted.collect(): print(i)
+
+--python-exceptions-finally.py
+
+while True:
+     try:
+         x = int(input("Please enter a number: "))
+         break
+     except ValueError:
+         print("Oops!  That was no valid number.  Try again...")
+     except (RuntimeError, TypeError, NameError):
+         pass
+     finally:
+         print('Executing finally')
+		 
+--python-exceptions.py
+
+while True:
+     try:
+         x = int(input("Please enter a number: "))
+         break
+     except ValueError:
+         print("Oops!  That was no valid number.  Try again...")
+     except (RuntimeError, TypeError, NameError):
+         pass
+
+--python-exceptions.py
+#copy one at a time
+1/0 #throws ZeroDivisionError
+4 + x*5 #throws NameError
+2 + '2' #throws TypeError
+
+--pyspark-word-count.py
+inputPath = "/Users/itversity/Research/data/wordcount.txt" or inputPath = "/public/randomtextwriter/part-m-00000"
+outputPath = "/Users/itversity/Research/data/wordcount" or outputPath = "/user/dgadiraju/wordcount"
+//Make sure outputPath does not exist for this example
+
+for i in sc.textFile(inputPath).\
+flatMap(lambda l: l.split(" ")).\
+map(lambda w: (w, 1)).\
+reduceByKey(lambda t, e: t + e).\
+take(100):
+    print(i)
+
+//Saving to file
+sc.textFile(inputPath).\
+flatMap(lambda l: l.split(" ")).\
+map(lambda w: (w, 1)).\
+reduceByKey(lambda t, e: t + e).\
+saveAsTextFile(outputPath)
+
+--CoreSpark-ResilientDistributedDatasets.py
+
+# 
+
+#Create RDD from file in HDFS
+
+orders = sc.textFile("/public/retail_db/orders")
+
+#Create RDD from local file (data from file -> collection -> RDD)
+productsList = open("/data/retail_db/products/part-00000").read().splitlines()
+productsRDD = sc.parallelize(productsList)
+
+#Raise any issues on https://discuss.itversity.com - make sure to categorize properly
+
+--core-spark-preview-rdd.py
+
+# 
+#Previewing the data
+orders = sc.textFile("/public/retail_db/orders")
+orders.first()
+for order in orders.take(100): print(order)
+
+# Converts distributed RDD to single threaded collection. Be careful when using collect
+for order in orders.collect: print(order) 
+
+orders.count()
+
+#Raise any issues on https://discuss.itversity.com - make sure to categorize properly
+
+--core-spark-filtering-data.py
+#Filtering the Data
+orders = sc.textFile("/public/retail_db/orders")
+
+ordersStatuses = orders.map(lambda order: order.split(",")[3])
+for orderStatus in orderStatuses.collect(): print(orderStatus)
+
+ordersFiltered = orders.\
+filter(lambda order: order.split(",")[3] == "COMPLETE" or order.split(",")[3] == "CLOSED")
+
+for order in ordersFiltered.take(10): print(order)
+
+--core-spark-filtering-data-accumulators.py
+
+#Check out our lab for practice: https://labs.itversity.com
+#Filtering the Data and using accumulators
+orders = sc.textFile("/public/retail_db/orders")
+
+def isComplete(order, ordersCompletedCount, ordersNonCompletedCount):
+  isCompleted = order.split(",")[3] == "COMPLETE" or order.split(",")[3] == "CLOSED"
+  if(isCompleted): ordersCompletedCount = ordersCompletedCount.add(1)
+  else: ordersNonCompletedCount = ordersNonCompletedCount.add(1)
+  return isCompleted
+
+ordersCompletedCount = sc.accumulator(0)
+ordersNonCompletedCount = sc.accumulator(0)
+
+ordersFiltered = orders.\
+filter(lambda order: isComplete(order, ordersCompletedCount, ordersNonCompletedCount))
+
+#We need to perform action to evaluate accumulators
+ordersFiltered.count()
+ordersCompletedCount.value
+ordersNonCompletedCount.value
+
+for order in ordersFiltered.take(10): print(order)
+#Raise any issues on https://discuss.itversity.com - make sure to categorize properly
+
+--core-spark-key-value-pairs.py
+
+#Check out our lab for practice: https://labs.itversity.com
+
+#Converting data into key value pairs using map
+#ordersFiltered is picked up from the previous topic with accumulators
+ordersMap = ordersFiltered.\
+map(lambda order: (int(order.split(",")[0]), order.split(",")[1]))
+
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItemsMap = orderItems.\
+map(lambda orderItem:
+  (int(orderItem.split(",")[1]), (int(orderItem.split(",")[2]), float(orderItem.split(",")[4])))
+)
+
+for order in ordersMap.take(10): print(order)
+for orderItem in orderItemsMap.take(10): print(orderItem)
+
+#Raise any issues on https://discuss.itversity.com - make sure to categorize properly
+
+--core-spark-joining-data-sets.py
+
+#Check out our lab for practice: https://labs.itversity.com
+ordersJoin = ordersMap.join(orderItemsMap)
+#(order_id, (order_date, (order_item_product_id, order_item_subtotal)))
+for i in ordersJoin.take(10): print(i)
+
+ordersLeftOuterJoin = ordersMap.leftOuterJoin(orderItemsMap)
+ordersWithNoOrderItems = ordersLeftOuterJoin.\
+filter(lambda order:
+  order[1][1] == None
+)
+for i in ordersWithNoOrderItems.take(10): print(i)
+
+ordersRightOuterJoin = orderItemsMap.rightOuterJoin(ordersMap)
+#Raise any issues on https://discuss.itversity.com - make sure to categorize properly
+
+--core-spark-aggregating-data.py
+#Check out our lab for practice: https://labs.itversity.com
+
+#Computing Daily revenue using reduceByKey
+ordersJoinMap = ordersJoin.\
+map(lambda r: ((r[1][0], r[1][1][0]), r[1][1][1]))
+
+dailyRevenuePerProductId = ordersJoinMap.\
+reduceByKey(lambda total, revenue: total + revenue)
+
+for i in dailyRevenuePerProductId.take(10): print(i)
+
+#Raise any issues on https://discuss.itversity.com - make sure to categorize properly
+
+--core-spark-aggregating-by-key.py
+#Check out our lab for practice: https://labs.itversity.com
+
+#Computing Daily revenue and count per product id using aggregateByKey
+dailyRevenueAndCountPerProductId = ordersJoinMap.\
+aggregateByKey((0.0, 0),
+lambda inter, revenue: (inter[0] + revenue, inter[1] + 1),
+lambda final, inter: (final[0] + inter[0], final[1] + inter[1])
+)
+
+for i in dailyRevenuePerProductId.take(10): print(i)
+
+#Raise any issues on https://discuss.itversity.com - make sure to categorize properly
+
+--core-spark-execution-cycle.py
+#Check out our lab for practice: https://labs.itversity.com
+
+#Get Daily Revenue per product using join - Execution Life Cycle
+products = open("/data/retail_db/products/part-00000").read().splitlines()
+productsRDD = sc.parallelize(products)
+productsMap = productsRDD.map(lambda product: (int(product.split(",")[0]), product.split(",")[2]))
+dailyRevenuePerProductIdMap = dailyRevenuePerProductId.map(lambda rec: (rec[0][1], (rec[0][0], rec[1])))
+
+dailyRevenuePerProductJoinProductsMap = dailyRevenuePerProductIdMap.join(productsMap)
+dailyRevenuePerProductName = dailyRevenuePerProductJoinProductsMap.map(lambda rec: rec[1])
+for i in dailyRevenuePerProductName.take(10): print(i)
+
+#Raise any issues on https://discuss.itversity.com - make sure to categorize properly
+
+--core-spark-broadcast-variables.py
+
+#Check out our lab for practice: https://labs.itversity.com
+
+#Get Daily Revenue per product using Broadcast Variable
+products = open("/data/retail_db/products/part-00000").read().splitlines()
+productsMap = dict(map(lambda product: (int(product.split(",")[0]), product.split(",")[2]), products))
+
+productsBV = sc.broadcast(productsMap)
+ordersJoinMap = ordersJoin.\
+map(lambda r: ((r[1][0], productsBV.value[r[1][1][0]]), r[1][1][1]))
+
+for i in ordersJoinMap.take(10): print(i)
+
+dailyRevenuePerProductName = ordersJoinMap.\
+reduceByKey(lambda total, revenue: total + revenue)
+
+#Raise any issues on https://discuss.itversity.com - make sure to categorize properly
+
+--spark-sql-create-hive-tables.py
+
+# Use a different database name
+
+create database dgadiraju_retail_db_txt;
+use dgadiraju_retail_db_txt;
+
+create table orders (
+  order_id int,
+  order_date string,
+  order_customer_id int,
+  order_status string
+) row format delimited fields terminated by ','
+stored as textfile;
+
+load data local inpath '/data/retail_db/orders' into table orders;
+
+create table order_items (
+  order_item_id int,
+  order_item_order_id int,
+  order_item_product_id int,
+  order_item_quantity int,
+  order_item_subtotal float,
+  order_item_product_price float
+) row format delimited fields terminated by ','
+stored as textfile;
+
+load data local inpath '/data/retail_db/order_items' into table order_items;
+
+create table customers (
+  customer_id int,
+  customer_fname varchar(45),
+  customer_lname varchar(45),
+  customer_email varchar(45),
+  customer_password varchar(45),
+  customer_street varchar(255),
+  customer_city varchar(45),
+  customer_state varchar(45),
+  customer_zipcode varchar(45)
+) row format delimited fields terminated by ','
+stored as textfile;
+
+load data local inpath '/data/retail_db/customers' into table customers;
+
+--spark-sql-create-ocr-table.py
+
+# Use a different database name
+
+create database dgadiraju_retail_db_orc;
+use dgadiraju_retail_db_orc;
+
+create table orders (
+  order_id int,
+  order_date string,
+  order_customer_id int,
+  order_status string
+) stored as orc;
+
+insert into table orders select * from dgadiraju_retail_db_txt.orders;
+
+create table order_items (
+  order_item_id int,
+  order_item_order_id int,
+  order_item_product_id int,
+  order_item_quantity int,
+  order_item_subtotal float,
+  order_item_product_price float
+) stored as orc;
+
+insert into table order_items select * from dgadiraju_retail_db_txt.order_items;
+
+--spark-sql-functions.py
+select order_status,
+       case  
+            when order_status IN ('CLOSED', 'COMPLETE') then 'No Action' 
+            when order_status IN ('ON_HOLD', 'PAYMENT_REVIEW', 'PENDING', 'PENDING_PAYMENT', 'PROCESSING') then 'Pending Action'
+            else 'Risky'
+       end from orders limit 10;
+
+select cast(date_format(order_date, 'YYYYMM') as int) from orders limit 100;
+
+--soark-sql-joins.py
+
+select o.*, c.* from orders o, customers c
+where o.order_customer_id = c.customer_id
+limit 10;
+
+select o.*, c.* from orders o inner join customers c
+on o.order_customer_id = c.customer_id
+limit 10;
+
+select o.*, c.* from customers c left outer join orders o
+on o.order_customer_id = c.customer_id
+limit 10;
+
+select count(1) from orders o inner join customers c
+on o.order_customer_id = c.customer_id;
+
+select count(1) from customers c left outer join orders o
+on o.order_customer_id = c.customer_id;
+
+# Get list of customers who have not placed any order
+
+select c.* from customers c left outer join orders o
+on o.order_customer_id = c.customer_id
+where o.order_customer_id is null;
+
+--spark-sql-aggregations.py
+
+select o.order_id, o.order_date, o.order_status, round(sum(oi.order_item_subtotal), 2) order_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id where o.order_status in ('COMPLETE', 'CLOSED') group by o.order_id, o.order_date, o.order_status having sum(oi.order_item_subtotal) >= 1000 order by o.order_date, order_revenue desc;
+
+select o.order_id, o.order_date, o.order_status, round(sum(oi.order_item_subtotal), 2) order_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id where o.order_status in ('COMPLETE', 'CLOSED') group by o.order_id, o.order_date, o.order_status having sum(oi.order_item_subtotal) >= 1000 distribute by o.order_date sort by o.order_date, order_revenue desc;
+
+select o.order_date, round(sum(order_item_subtotal), 2) daily_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id where o.order_status in ('COMPLETE', 'CLOSED') group by o.order_date;
+
+--spark-sql-sorting.py
+select * from (
+select o.order_id, o.order_date, o.order_status, oi.order_item_subtotal, 
+round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) order_revenue,
+oi.order_item_subtotal/round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) pct_revenue,
+round(avg(oi.order_item_subtotal) over (partition by o.order_id), 2) avg_revenue
+from orders o join order_items oi
+on o.order_id = oi.order_item_order_id
+where o.order_status in ('COMPLETE', 'CLOSED')) q
+where order_revenue >= 1000
+order by order_date, order_revenue desc, rank_revenue;
+
+--spark-sql-operations.py
+select 1, "Hello"
+union 
+select 2, "World"
+union 
+select 1, "Hello"
+union 
+select 1, "world";
+
+--spark-sql-aggregations.py
+
+select * from (
+select o.order_id, o.order_date, o.order_status, oi.order_item_subtotal, 
+round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) order_revenue,
+oi.order_item_subtotal/round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) pct_revenue,
+round(avg(oi.order_item_subtotal) over (partition by o.order_id), 2) avg_revenue
+from orders o join order_items oi
+on o.order_id = oi.order_item_order_id
+where o.order_status in ('COMPLETE', 'CLOSED')) q
+where order_revenue >= 1000
+order by order_date, order_revenue desc, rank_revenue;
+
+--spark-sql-ranking.py
+
+select * from (
+select o.order_id, o.order_date, o.order_status, oi.order_item_subtotal, 
+round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) order_revenue,
+oi.order_item_subtotal/round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) pct_revenue,
+round(avg(oi.order_item_subtotal) over (partition by o.order_id), 2) avg_revenue,
+rank() over (partition by o.order_id order by oi.order_item_subtotal desc) rnk_revenue,
+dense_rank() over (partition by o.order_id order by oi.order_item_subtotal desc) dense_rnk_revenue,
+percent_rank() over (partition by o.order_id order by oi.order_item_subtotal desc) pct_rnk_revenue,
+row_number() over (partition by o.order_id order by oi.order_item_subtotal desc) rn_orderby_revenue,
+row_number() over (partition by o.order_id) rn_revenue
+from orders o join order_items oi
+on o.order_id = oi.order_item_order_id
+where o.order_status in ('COMPLETE', 'CLOSED')) q
+where order_revenue >= 1000
+order by order_date, order_revenue desc, rnk_revenue;
+
+--spark-sql-windowing-functions.py
+
+select * from (
+select o.order_id, o.order_date, o.order_status, oi.order_item_subtotal, 
+round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) order_revenue,
+oi.order_item_subtotal/round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) pct_revenue,
+round(avg(oi.order_item_subtotal) over (partition by o.order_id), 2) avg_revenue,
+rank() over (partition by o.order_id order by oi.order_item_subtotal desc) rnk_revenue,
+dense_rank() over (partition by o.order_id order by oi.order_item_subtotal desc) dense_rnk_revenue,
+percent_rank() over (partition by o.order_id order by oi.order_item_subtotal desc) pct_rnk_revenue,
+row_number() over (partition by o.order_id order by oi.order_item_subtotal desc) rn_orderby_revenue,
+row_number() over (partition by o.order_id) rn_revenue,
+lead(oi.order_item_subtotal) over (partition by o.order_id order by oi.order_item_subtotal desc) lead_order_item_subtotal,
+lag(oi.order_item_subtotal) over (partition by o.order_id order by oi.order_item_subtotal desc) lag_order_item_subtotal,
+first_value(oi.order_item_subtotal) over (partition by o.order_id order by oi.order_item_subtotal desc) first_order_item_subtotal,
+last_value(oi.order_item_subtotal) over (partition by o.order_id order by oi.order_item_subtotal desc) last_order_item_subtotal
+from orders o join order_items oi
+on o.order_id = oi.order_item_order_id
+where o.order_status in ('COMPLETE', 'CLOSED')) q
+where order_revenue >= 1000
+order by order_date, order_revenue desc, rnk_revenue;
+
+--spark-sql-temp-table.py
+from pyspark.sql import Row
+ordersRDD = sc.textFile("/public/retail_db/orders")
+ordersDF = ordersRDD.\
+map(lambda o: Row(order_id=int(o.split(",")[0]), order_date=o.split(",")[1], order_customer_id=int(o.split(",")[2]), order_status=o.split(",")[3])).toDF()
+ordersDF.registerTempTable("ordersDF_table")
+sqlContext.sql("select order_status, count(1) from ordersDF_table group by order_status").show()
+
+sqlContext.sql("use dgadiraju_retail_db_txt")
+from pyspark.sql import Row
+productsRaw = open("/data/retail_db/products/part-00000").read().splitlines()
+productsRDD = sc.parallelize(productsRaw)
+productsDF = productsRDD.\
+map(lambda p: Row(product_id=int(p.split(",")[0]), product_name=p.split(",")[2])).\
+toDF()
+productsDF.registerTempTable("products")
+
+sqlContext.sql("select * from products").show()
+sqlContext.sql("select * from orders").show()
+sqlContext.sql("select * from order_items").show()
+
+--spark-sql-application.py
+
+from pyspark.sql import Row
+ordersRDD = sc.textFile("/public/retail_db/orders")
+ordersDF = ordersRDD.\
+map(lambda o: Row(order_id=int(o.split(",")[0]), order_date=o.split(",")[1], order_customer_id=int(o.split(",")[2]), order_status=o.split(",")[3])).toDF()
+ordersDF.registerTempTable("ordersDF_table")
+sqlContext.sql("select order_status, count(1) from ordersDF_table group by order_status").show()
+
+sqlContext.sql("use dgadiraju_retail_db_txt")
+from pyspark.sql import Row
+productsRaw = open("/data/retail_db/products/part-00000").read().splitlines()
+productsRDD = sc.parallelize(productsRaw)
+productsDF = productsRDD.\
+map(lambda p: Row(product_id=int(p.split(",")[0]), product_name=p.split(",")[2])).\
+toDF()
+productsDF.registerTempTable("products")
+
+sqlContext.sql("select * from products").show()
+sqlContext.sql("select * from orders").show()
+sqlContext.sql("select * from order_items").show()
+
+sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+sqlContext.sql("SELECT o.order_date, p.product_name, sum(oi.order_item_subtotal) daily_revenue_per_product \
+FROM orders o JOIN order_items oi \
+ON o.order_id = oi.order_item_order_id \
+JOIN products p \
+ON p.product_id = oi.order_item_product_id \
+WHERE o.order_status IN ('COMPLETE', 'CLOSED') \
+GROUP BY o.order_date, p.product_name \
+ORDER BY o.order_date, daily_revenue_per_product DESC").show()
+
+--spark-sql-saving-dataframe.py
+
+sqlContext.sql("CREATE DATABASE dgadiraju_daily_revenue"); sqlContext.sql("CREATE TABLE dgadiraju_daily_revenue.daily_revenue (order_date string, product_name string, daily_revenue_per_product float) STORED AS orc")
+
+daily_revenue_per_product_df = sqlContext.sql("SELECT o.order_date, p.product_name, sum(oi.order_item_subtotal) daily_revenue_per_product \ FROM orders o JOIN order_items oi \ ON o.order_id = oi.order_item_order_id \ JOIN products p \ ON p.product_id = oi.order_item_product_id \ WHERE o.order_status IN ('COMPLETE', 'CLOSED') \ GROUP BY o.order_date, p.product_name \ ORDER BY o.order_date, daily_revenue_per_product DESC")
+
+daily_revenue_per_product_df.insertInto("dgadiraju_daily_revenue.daily_revenue")
+
+--spark-sql-dataframe-operations.py
+
+daily_revenue_per_product_df.show(100)
+daily_revenue_per_product_df.save("/user/dgadiraju/daily_revenue_save", "json")
+daily_revenue_per_product_df.write.json("/user/dgadiraju/daily_revenue_write")
+daily_revenue_per_product_df.select("order_date", "daily_revenue_per_product").show()
+daily_revenue_per_product_df.filter(daily_revenue_per_product_df["order_date"] == "2013-07-26 00:00:00.0").show()
+
+--python-run-time-arguments.py
+import sys
+print("Hello " + sys.argv[1])
+
+--python-get-count-by-date-constructs.py
+path = "/Users/itversity/Research/data/retail_db/orders/part-00000"
+orders = open(path).read().splitlines()
+countPerDate = {}
+for i in orders:
+    date = i.split(",")[1]
+    if(countPerDate.has_key(date)):
+        count = countPerDate[date]
+        countPerDate[date] = count + 1
+    else:
+        countPerDate[date] = 0
+for d in countPerDate:
+    print(d + "\t" + str(countPerDate[d]))
+
+--python-get-count-by-date-mapreduce.py
+import itertools as it
+path = "/Users/itversity/Research/data/retail_db/orders/part-00000"
+orders = open(path).read().splitlines()
+
+ordersMap = it.imap(lambda o: (o.split(",")[1], 1), orders)
+ordersGroupBy = it.groupby(sorted(ordersMap), lambda k: k[0])
+
+def getCount(l):
+    v = map(lambda k: k[1], list(l))
+    return reduce(lambda tot, val: tot + val, v)
+
+orderCountByDate = it.imap(lambda o: (o[0], getCount(o[1])), ordersGroupBy)
+
+for i in sorted(orderCountByDate): print(i)
+
+--python-get-revenue-for-order-id-constructs.py
+
+path = "/Users/itversity/Research/data/retail_db/order_items/part-00000"
+orderItems = open(path).read().splitlines()
+
+def getOrderRevenue(orderItems, orderId):
+    orderRevenue = 0
+    for i in orderItems:
+        if(int(i.split(",")[1]) == orderId):
+            orderRevenue = orderRevenue + float(i.split(",")[4])
+    return orderRevenue
+
+print(getOrderRevenue(orderItems, 2))
+
+--python-get-revenue-for-order-id-mapreduce.py
+
+path = "/Users/itversity/Research/data/retail_db/order_items/part-00000"
+orderItems = open(path).read().splitlines()
+
+def getOrderRevenueMR(orderItems, orderId):
+    orderItemsFiltered = filter(lambda o: int(o.split(",")[1]) == orderId, orderItems)
+    orderItemsMap = map(lambda o: float(o.split(",")[4]), orderItemsFiltered)
+    orderRevenue = reduce(lambda total, revenue: total + revenue, orderItemsMap)
+    return orderRevenue
+
+print(getOrderRevenueMR(orderItems, 2))
+
+--python-sum-lambda-functions.py
+
+# Correct way of getting sumOfIntegers
+def sumOfIntegers(lb, ub):
+    l = lb - 1
+    return ((ub * (ub + 1)) / 2) - ((l * (l + 1)) / 2)
+
+print(sumOfIntegers(2, 5))
+
+# To demonstrate lambda functions we will loop through the range
+# Conventional approach, we need to write different functions for
+# sum of range of numbers
+# sum of squares in range of numbers
+# and more
+def sum(lb, ub):
+    total = 0
+    for i in range(lb, ub + 1):
+        total += i
+    return total
+print "sum of integers using conventional approach " + str(sum(3, 5))
+
+def sumOfSquares(lb, ub):
+    total = 0
+    for i in range(lb, ub + 1):
+        total += (i * i)
+    return total
+print "sum of squares using conventional approach " + str(sumOfSquares(3, 5))
+
+# With lambda functions, we can get more concise and readable code
+def sum(f, lb, ub):
+    total = 0
+    for i in range(lb, ub + 1):
+        total += f(i)
+    return total
+print "sum of integers using lambda functions " + str(sum(lambda i: i, 3, 5))
+print "sum of squares using lambda functions " + str(sum(lambda i: i * i, 3, 5))
+
+# We can also pass named function as argument
+def cube(i): return i * i * i
+print "sum of cubes using lambda functions " + str(sum(lambda i: cube(i), 3, 5))
+
+--python-mysql-demo.py
+
+import sys
+import ConfigParser as cp
+import mysql.connector, datetime
+from mysql.connector import errorcode
+
+props = cp.RawConfigParser()
+props.read("../resources/application.properties")
+try:
+    env = sys.argv[1]
+    username = props.get(env, "db_username")
+    password = props.get(env, "db_password")
+    hostname = props.get(env, "db_hostname")
+    database = props.get(env, "db_name")
+    cnx = mysql.connector.connect(user=username, password=password,
+                                  host=hostname,
+                                  database=database)
+
+    cursor = cnx.cursor()
+    # query = ("select * from orders limit 10")
+    # cursor.execute(query)
+
+    # for i in cursor:
+    #     print(i)
+
+    query = ("SELECT first_name, last_name, " +
+      "case when commission_pct is null then 'Not Eligible' else " +
+      "salary * commission_pct end commission_amount FROM employees")
+
+    cursor.execute(query)
+
+    # for i in cursor:
+    #     print(i)
+
+    l = list(cursor)
+    for i in l: print("first_name:" + i[0] + ";" +
+                      "last_name:" + i[1] + ";" +
+                      "commission_amount:" + i[2])
+    cursor.close()
+
+except mysql.connector.Error as err:
+  if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+    print("Something is wrong with your user name or password")
+  elif err.errno == errorcode.ER_BAD_DB_ERROR:
+    print("Database does not exist")
+  else:
+    print(err)
+else:
+  cnx.close()
+  
+--OrdersJoinOrderItems.py
+from pyspark import SparkConf, SparkContext
+import sys
+
+conf = SparkConf().setAppName("Orders Join Order Items").setMaster(sys.argv[1])
+sc = SparkContext(conf=conf)
+
+inputPath = sys.argv[2]
+orders = sc.textFile(inputPath + "orders")
+orderItems = sc.textFile(inputPath + "order_items")
+
+# Apply transformation to convert string to tuple
+#1,2013-07-25 00:00:00.0,11599,CLOSED
+ordersMap = orders. \
+    map(lambda o: (int(o.split(",")[0]), o))
+#(1, u'1,2013-07-25 00:00:00.0,11599,CLOSED')
+
+# Apply transformation to convert string to tuple
+#1,1,957,1,299.98,299.98
+orderItemsMap = orderItems. \
+    map(lambda oi: (int(oi.split(",")[1]), oi))
+#(1, u'1,1,957,1,299.98,299.98')
+
+ordersLeftOuterJoin = ordersMap.leftOuterJoin(orderItemsMap)
+#(1, (u'1,2013-07-25 00:00:00.0,11599,CLOSED', u'1,1,957,1,299.98,299.98'))
+#(6, (u'6,2013-07-25 00:00:00.0,7130,COMPLETE', None))
+
+# ordersRightOuterJoin = orderItemsMap.rightOuterJoin(ordersMap)
+# #(1, (u'1,1,957,1,299.98,299.98', u'1,2013-07-25 00:00:00.0,11599,CLOSED'))
+# #(6, (None, u'6,2013-07-25 00:00:00.0,7130,COMPLETE'))
+#
+ordersWitNoOrderItems = ordersLeftOuterJoin. \
+    filter(lambda rec: rec[1][0] == None). \
+    map(lambda rec: rec[1][1])
+
+outputPath = sys.argv[3]
+ordersWitNoOrderItems.saveAsTextFile(outputPath)
+
+--DailyRevenuePerCustomer.py
+
+# Problem Statement: Get daily revenue per customer
+
+from pyspark import SparkConf, SparkContext
+import sys
+
+conf = SparkConf().setAppName("Orders Join Order Items").setMaster(sys.argv[1])
+sc = SparkContext(conf=conf)
+
+#Reading the data
+inputPath = sys.argv[2]
+orders = sc.textFile(inputPath + "orders")
+orderItems = sc.textFile(inputPath + "order_items")
+
+# Join orders, order_items and customers
+# To join we need to convert into tuples
+# First work on joining orders and order_items
+ordersMap = orders.map(lambda o: (int(o.split(",")[0]), (o.split(",")[1], int(o.split(",")[2]))))
+
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+ordersJoin = ordersMap.join(orderItemsMap)
+# Get revenue per day per customer id
+# Read customers to get customer details and broadcast
+customersPath = sys.argv[3]
+customers = open(customersPath).read().splitlines()
+customersMap = dict(map(lambda c: (int(c.split(",")[0]),(c.split(",")[1]) + " " + (c.split(",")[2])), customers))
+customersBV = sc.broadcast(customersMap)
+# for i in ordersJoin.take(10): print(i)
+revenuePerDatePerCustId = ordersJoin. \
+    map(lambda o: ((o[1][0][0], customersBV.value[o[1][0][1]]), o[1][1])). \
+    reduceByKey(lambda t, v: t + v)
+
+revenuePerDatePerCustId. \
+    map(lambda rec: rec[0][0] + "\t" + rec[0][1] + "\t" + str(rec[1])). \
+    saveAsTextFile(sys.argv[4])
+# Final Output: date(tab)customer name(tab)revenue
+# customer name can be computed using first name and last name
+
+--TopNCustomersPerDay.py
+
+# Get top N customers by revenue for each day
+# COMPLETE and CLOSED orders
+# Use Spark SQL
+
+from pyspark import SparkConf,SparkContext
+from pyspark.sql import HiveContext, Row
+import sys
+
+executionMode = sys.argv[1]
+topN = int(sys.argv[2])
+inputBaseDir = sys.argv[3]
+outputDir = sys.argv[4]
+
+conf = SparkConf().setAppName("Top " + str(topN) + " customers per day").setMaster(executionMode)
+sc = SparkContext(conf=conf)
+sqlContext = HiveContext(sc)
+
+ordersRDD = sc.textFile(inputBaseDir + "orders")
+ordersDF = ordersRDD. \
+    map(lambda o: Row(order_id=int(o.split(",")[0]), order_date=o.split(",")[1],
+                      order_customer_id = int(o.split(",")[2]), order_status=o.split(",")[3])). \
+    toDF()
+ordersDF.registerTempTable("orders")
+# sqlContext.sql("select * from orders").show()
+
+orderItemsRDD = sc.textFile(inputBaseDir + "order_items")
+orderItemsDF = orderItemsRDD. \
+    map(lambda oi: Row(order_item_id=int(oi.split(",")[0]),
+                       order_item_order_id=int(oi.split(",")[1]),
+                       order_item_product_id=int(oi.split(",")[2]),
+                       order_item_quantity=int(oi.split(",")[3]),
+                       order_item_subtotal=float(oi.split(",")[4]),
+                       order_item_product_price=float(oi.split(",")[5]))). \
+    toDF()
+orderItemsDF.registerTempTable("order_items")
+
+customers = sc.textFile(inputBaseDir + "/customers")
+customersDF = customers.\
+    map(lambda o: Row(customer_id = int(o.split(",")[0]),
+                      customer_fname = o.split(",")[1],
+                      customer_lname=o.split(",")[2],
+                      customer_email=o.split(",")[3],
+                      customer_password = o.split(",")[4],
+                      customer_street=o.split(",")[5],
+                      customer_city=o.split(",")[6],
+                      customer_state=o.split(",")[7],
+                      customer_zipcode=o.split(",")[8])).\
+    toDF()
+customersDF.registerTempTable("customers")
+sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+sqlContext. \
+    sql("select order_date, order_customer_id, "
+               "sum(order_item_subtotal) daily_revenue_per_customer "
+               "from orders o join order_items oi "
+               "on o.order_id = oi.order_item_order_id "
+               "where order_status in ('COMPLETE', 'CLOSED') "
+               "group by order_date, order_customer_id"). \
+    registerTempTable("daily_revenue_per_customer")
+topNCustomersPerDay = sqlContext.sql("select order_date, "
+               "concat(concat(customer_fname, ', '), customer_lname) customer_name, "
+               "daily_revenue_per_customer from "
+               "(select order_date, order_customer_id, "
+               "daily_revenue_per_customer, "
+               "rank() over (partition by order_date order by daily_revenue_per_customer desc) rnk "
+               "from daily_revenue_per_customer) q join customers c "
+               "on c.customer_id = q.order_customer_id "
+               "where rnk <= " + str(topN) + " "
+               "order by order_date, rnk")
+topNCustomersPerDay.save(outputDir, "json")
+# topNCustomersPerDay.write.json(outputDir)
+
+--sumOfIntegers.py
+
+def sumOfIntegers(lb, ub):
+  total = 0
+  for i in range(lb, ub + 1):
+    total = total + i
+  return total
+  
+--GetNoOfStudentsForDepartment.py
+
+def getNoOfStudents(srkrData, dept):
+  noOfStudents = 0
+  for s in srkrData:
+    if(s.split("\t")[1] == dept): noOfStudents = noOfStudents + 1
+  return noOfStudents
+
+srkrData = open("/data/srkr.tsv").read().splitlines()
+getNoOfStudents(srkrData, "CSE")
+
+--GetNoOfStudentsPerDepartment.py
+
+def getNoOfStudentsPerDepartment(srkrData):
+  studentsPerDepartment = {}
+  for s in srkrData:
+    dept = s.split("\t")[1]
+    if(studentsPerDepartment.has_key(dept) == True):
+      deptCount = studentsPerDepartment[dept]
+      deptCount = deptCount + 1
+      studentsPerDepartment[dept] = deptCount
+    else:
+      studentsPerDepartment[dept] = 1
+  return studentsPerDepartment
+
+srkrData = open("/data/srkr.tsv").read().splitlines()
+dc = getNoOfStudentsPerDepartment(srkrData)
+
+--GetCountForGivenStatus.py
+
+def getCountForGivenStatus(orders, status):
+  ordersFiltered = filter(lambda order: order.split(",")[3] == status, orders)
+  return len(ordersFiltered)
+
+orders = open("/data/retail_db/orders/part-00000").read().splitlines()
+getCountForGivenStatus(orders, 'COMPLETE')
+  
+--GetRevenueForOrderId.py
+
+def getRevenueForOrderIdUsingLoops(orderItems, orderId):
+  totalRevenue = 0.0
+  for oi in orderItems:
+    if(int(oi.split(",")[1]) == orderId):
+      totalRevenue = totalRevenue + float(oi.split(",")[4])
+  return totalRevenue
+
+orderItems = open("/data/retail_db/order_items/part-00000").read().splitlines()
+getRevenueForOrderIdUsingLoops(orderItems, 68883)
+
+def getRevenueForOrderId(orderItems, orderId):
+  orderItemsFiltered = filter(lambda oi: int(oi.split(",")[1]) == orderId, orderItems)
+  orderItemsMap = map(lambda oi: float(oi.split(",")[4]), orderItemsFiltered)
+  totalRevenue = reduce(lambda t, v: t + v, orderItemsMap)
+  return totalRevenue
+
+orderItems = open("/data/retail_db/order_items/part-00000").read().splitlines()
+getRevenueForOrderId(orderItems, 68883)
+
+--GetNumberOfStudentsForSocial.py
+
+import sys
+
+def getNumberOfStudentsForSocial(srkrData, social):
+  count = 0
+  for i in srkrData:
+    if(social in i.split("\t")[7].split(", ")):
+      count = count + 1
+  return count
+
+srkrData = open(sys.argv[1]).read().splitlines()
+print("running " + sys.argv[0])
+social = sys.argv[2]
+print("Number of students using " + social + " are " + str(getNumberOfStudentsForSocial(srkrData, social)))
+
+--CountBySocial.py
+
+import itertools as it, sys
+from itertools import chain
+
+def getCountBySocial(srkrData):
+  srkrDataMap = chain. \
+    from_iterable(it.imap(lambda s: s.split("\t")[7].split(", "), srkrData))
+  srkrGroupby = it.groupby(sorted(srkrDataMap))
+  srkrGroupbyMap = it.imap(lambda t: (t[0], len(list(t[1]))), srkrGroupby)
+  return srkrGroupbyMap
+
+srkrData = open(sys.argv[1]).read().splitlines()
+for i in getCountBySocial(srkrData): print(i)
+
+--GetRevenuePerOrder.py
+
+import itertools as it
+import sys
+def getRevenuePerOrder(orderItems):
+#2,2,1073,1,199.99,199.99
+#3,2,502,5,250.0,50.0
+#4,2,403,1,129.99,129.99
+  orderItemsMap = it.imap(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])), orderItems)
+#(2,199.99)
+#(2,250.0)
+#(2,129.99)
+  orderItemsGroupBy = it.groupby(sorted(orderItemsMap), lambda k: k[0])
+#(2, [(2,199.99), (2,250.0), (2,129.99)])
+  revenuePerOrder = it.imap(lambda r: (r[0], sum(map(lambda v: v[1], r[1]))), orderItemsGroupBy)  
+  return revenuePerOrder
+
+orderItems = open(sys.argv[1]).read().splitlines()
+for i in list(getRevenuePerOrder(orderItems))[:10]: print(i)
+
+----GetCountByDegree.py
+
+kgislData = open("C:\\kgisl.csv").read().splitlines()
+countByDegree = {}
+for i in kgislData:
+    degree = i.split("\t")[3] #CSE
+    if(countByDegree.has_key(degree)):
+        countByDegree[degree] = countByDegree[degree] + 1
+    else:
+        countByDegree[degree] = 1 #{"CSE" : 1}
+
+for i in countByDegree:
+    print(i + "\t" + str(countByDegree[i]))
+	
+--GetCountOfEngineeringStudents.py
+kgislData = open("C:\\kgisl.csv").read().splitlines()
+countByDegree = {}
+for i in kgislData:
+    degree = "Engineering" if(i.split("\t")[3]
+                              in ["CSE", "IT", "ECE"]) \
+        else "Non Engineering"
+    if(countByDegree.has_key(degree)):
+        countByDegree[degree] = countByDegree[degree] + 1
+    else:
+        countByDegree[degree] = 1 #{"CSE" : 1}
+
+for i in countByDegree:
+    print(i + "\t" + str(countByDegree[i]))
+	
+--OrderItemsMR.py
+
+# Get order reveue for order_id 2
+orderItems = open("/data/retail_db/order_items/part-00000").read().splitlines()
+orderItemsFiltered = filter(lambda p: int(p.split(",")[1]) == 2, orderItems)
+orderItemsRevenue = map(lambda p: float(p.split(",")[4]), orderItemsFiltered)
+import functools as ft
+orderRevenue = ft.reduce(lambda x, y: x + y, orderItemsRevenue)
+print(orderRevenue)
+
+# Get min order item revenue for order_id 2
+orderItems = open("/data/retail_db/order_items/part-00000").read().splitlines()
+orderItemsFiltered = filter(lambda p: int(p.split(",")[1]) == 2, orderItems)
+orderItemsRevenue = map(lambda p: float(p.split(",")[4]), orderItemsFiltered)
+import functools as ft
+orderMinRevenue = ft.reduce(lambda x, y: x if(x <= y) else y, orderItemsRevenue)
+print(orderMinRevenue)
+
+--GetRevenueForEachOrder.py
+
+orderItems = open("/data/retail_db/order_items/part-00000").read().splitlines()
+print(len(orderItems))
+for i in orderItems[:10]: print(i)
+
+def getRevenueForEachOrderId(orderItems):
+    """1,1,957,1,299.98,299.98
+    2,2,1073,1,199.99,199.99
+    3,2,502,5,250.0,50.0
+    4,2,403,1,129.99,129.99
+    5,4,897,2,49.98,24.99
+    6,4,365,5,299.95,59.99
+    7,4,502,3,150.0,50.0
+    8,4,1014,4,199.92,49.98"""
+    revenueForEachOrder = {}
+    for i in orderItems:
+        """First Iteration: {}"""
+        """Second Iteration: {1 : 299.99}"""
+        """Third Iteration: {1:299.99, 2:199.99}"""
+        """Fourth Iteration: {1:299.99, 2:499.99}"""
+        """Fifth Iteration: {1:299.99, 2:579.98}"""
+        orderId = int(i.split(",")[1]) #4
+        orderRevenue = float(i.split(",")[4]) #49.98
+        if(orderId in revenueForEachOrder): # 4 in {1:299.99, 2:579.98}
+            revenueForEachOrder[orderId] += orderRevenue
+            #revenueForEachOrder[orderId] = revenueForEachOrder[orderId] + orderRevenue
+            """Third Iteration: {1:299.99, 2:449.99}"""
+            """Fourth Iteration: {1:299.99, 2:579.98}"""
+        else:
+            revenueForEachOrder[orderId] = orderRevenue   
+            #First Iteration: {1 :299.99}
+            #Second Iteration: {1:299.99, 2:199.99}
+            #Fifth Iteration: {1:299.99, 2:579.98, 4:49.98}
+    return revenueForEachOrder
+
+revenueForEachOrder = getRevenueForEachOrderId(orderItems)
+print(len(revenueForEachOrder))
+for i in list(revenueForEachOrder.items())[:10]:
+    print(i)
+	
+--GetCountByDegree.py
+
+kgislData = open("/data/kgisl.csv").read().splitlines()
+"""
+record1
+record2
+"""
+kgislDegrees = map(lambda k: k.split("\t")[3], kgislData)
+"""
+ECE
+IT
+IT
+ECE
+"""
+import itertools as it
+kgislDegreesSorted = sorted(kgislDegrees)
+"""
+B.SC.Computerscience
+B.Sc.Computer Science
+BCA
+BSC CS
+CSE
+CSE
+CSE
+CSE
+"""
+kgislGroupByDegree = it.groupby(kgislDegreesSorted)
+#('CSE', ['CSE', 'CSE',...........])
+countByDegree = map(lambda k: (k[0], len(list(k[1]))), kgislGroupByDegree)
+                    
+for i in list(countByDegree): print(i)
+
+--ProcessingTuplesUsingMapReduce.py
+orderItems = open("/data/retail_db/order_items/part-00000"). \
+read(). \
+splitlines()
+orderItemsTuples = map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])), orderItems)
+
+def getRevenuePerOrder(orderItemsTuples, orderId):
+    orderItemsFilteredTuples = filter(lambda oi: oi[0] == orderId, orderItemsTuples)
+    orderItemsFilteredSubtotals = map(lambda oi: oi[1], orderItemsFilteredTuples)
+    return (orderId, sum(orderItemsFilteredSubtotals))
+
+print(getRevenuePerOrder(orderItemsTuples, 2))
+
+--GetRevenueForEachOrderIdMR.py
+
+orderItems = open("/data/retail_db/order_items/part-00000"). \
+read(). \
+splitlines()
+
+def getRevenue(orderItemsSubtotals):
+    return (orderItemsSubtotals[0], sum(map(lambda o: o[1], orderItemsSubtotals[1])))
+def getRevenueForEachOrder(orderItems):
+    """1,1,957,1,299.98,299.98
+    2,2,1073,1,199.99,199.99
+    3,2,502,5,250.0,50.0
+    4,2,403,1,129.99,129.99
+    5,4,897,2,49.98,24.99
+    6,4,365,5,299.95,59.99
+    7,4,502,3,150.0,50.0
+    8,4,1014,4,199.92,49.98"""
+    orderItemsTuples = map(lambda oi: 
+                           (int(oi.split(",")[1]), float(oi.split(",")[4])), 
+                           orderItems)
+    """
+    (1, 299.98)
+    (2, 199.99)
+    (2, 250.0)
+    (2, 129.99)
+    (4, 49.98)
+    (4, 299.95)
+    (4, 150.0)
+    (4, 199.92)
+    (5, 299.98)
+    (5, 299.95)"""
+    import itertools as it
+    orderItemsTuplesGroupById = it. \
+    groupby(
+        sorted(orderItemsTuples, key=lambda k: k[0]), 
+        lambda k: k[0])
+    """
+    (1, [(1, 299.98)])
+    (2, [(2, 199.99), (2, 250.0), (2, 129.99)])
+    """
+    revenuePerOrder = map(lambda oi: getRevenue(oi), 
+                          orderItemsTuplesGroupById)
+    return revenuePerOrder
+
+    
+revenuePerOrder = getRevenueForEachOrder(orderItems)
+for i in list(revenuePerOrder)[:10]: print(i)
+
+--SparkGetRevenueForGivenOrderId.py
+
+orderItems = sc.textFile("C:\\data\\retail_db\\order_items")
+orderItemsFiltered = orderItems. \
+filter(lambda oi: int(oi.split(",")[1]) == 2)
+orderItemsMap = orderItemsFiltered. \
+map(lambda oi: float(oi.split(",")[4]))
+orderItemsMap.reduce(lambda x, y: x + y)
+
+--pyspark-StreamingWordCount.py
+
+from pyspark import SparkConf, SparkContext
+from pyspark.streaming import StreamingContext
+
+conf = SparkConf().setAppName("Streaming Department Count").setMaster("yarn-client")
+sc = SparkContext(conf=conf)
+
+ssc = StreamingContext(sc, 30)
+
+retailStream = ssc.socketTextStream("gw01.itversity.com", 19999)
+departmentData = retailStream.filter(lambda r: r.split(" ")[6].split("/")[1] == "department")
+
+departmentData. \
+  map(lambda r: (r.split(" ")[6].split("/")[2], 1)). \
+  reduceByKey(lambda x,y: x + y). \
+  pprint()
+
+ssc.start()
+ssc.awaitTermination()
+
+--SparkStreamingCountByDepartment.py
+
+from pyspark.streaming import StreamingContext
+ssc = StreamingContext(sc, 10)
+lines = ssc.socketTextStream("gw01.itversity.com", 19999)
+departmentData = lines.filter(lambda s: s.split()[6].split("/")[1] == "department")
+departmentTuples = departmentData.map(lambda s: (s.split()[6].split("/")[2], 1))
+countByDepartment = departmentTuples.reduceByKeyAndWindow(lambda x, y: x + y, 30, 10)
+#countByDepartment = departmentTuples.reduceByKey(lambda x, y: x + y)
+#countByDepartment.pprint()
+countByDepartment.saveAsTextFiles("/user/dgadiraju/streaming_count_by_department")
+ssc.start()
+
+--FlumeStreamingDepartmentCount.py
+
+from pyspark import SparkConf, SparkContext, StorageLevel
+from pyspark.streaming import *
+from pyspark.streaming.flume import *
+
+conf = SparkConf().setAppName("Flume and Spark Streaming").setMaster("local[2]")
+sc = SparkContext(conf=conf)
+ssc = StreamingContext(sc, 30)
+
+stream = FlumeUtils.createPollingStream(ssc, [("gw01.itversity.com", 19999)])
+messages = stream.map(lambda s: s[1])
+departmentData = messages.filter(lambda r: r.split(" ")[6].split("/")[1] == "department")
+
+departmentData. \
+  map(lambda r: (r.split(" ")[6].split("/")[2], 1)). \
+  reduceByKey(lambda x,y: x + y). \
+  saveAsTextFiles("/user/dgadiraju/flumestreamingdemo")
+
+ssc.start()
+ssc.awaitTermination()
+
+#spark-submit
+#spark-submit --master yarn \
+#  --conf spark.ui.port=12789 \
+#  --jars "/usr/hdp/2.5.0.0-1245/spark/lib/spark-streaming-flume_2.10-1.6.2.jar,/usr/hdp/2.5.0.0-1245/spark/lib/spark-streaming-flume-sink_2.10-1.6.2.jar,/usr/hdp/2.5.0.0-1245/flume/lib/flume-ng-sdk-1.5.2.2.5.0.0-1245.jar" \
+#  FlumeStreamingDepartmentCount.py
+
+--spark-create-rdd.py
+orderItems = sc.textFile("/public/retail_db/order_items")
+type(orderItems)
+help(orderItems)
+orderItems.first()
+for i in orderItems.take(10): print(i)
+
+--spark-create-rdd-parallelize.py
+l = range(1, 10000)
+lRDD = sc.parallelize(l)
+productsRaw = open("/data/retail_db/products/part-00000").read().splitlines()
+type(productsRaw)
+productsRDD = sc.parallelize(productsRaw)
+type(productsRDD)
+productsRDD.first()
+for i in productsRDD.take(10): print(i)
+productsRDD.count()
+
+--spark-create-dataframe.py
+sqlContext.load("/public/retail_db_json/order_items", "json").show()
+sqlContext.read.json("/public/retail_db_json/order_items").show()
+
+--spark-flatmap-wordcount.py
+
+#flatMap
+linesList = ["How are you", "let us perform", "word count using flatMap", "to understand flatMap in detail"]
+lines = sc.parallelize(linesList)
+words = lines.flatMap(lambda l: l.split(" "))
+tuples = words.map(lambda word: (word, 1))
+for i in tuples.countByKey(): print(i)
+
+--spark-map-example.py
+
+#map
+orders = sc.textFile("/public/retail_db/orders")
+help(orders.map)
+
+#Get status
+orders.map(lambda o: o.split(",")[3]).first()
+#Get count
+orders.map(lambda o: o.split(",")[1]).first()
+
+#Convert date format from YYYY-MM-DD HH24:MI:SS -> YYYYMM
+#Type cast date to integer
+orders.map(lambda o: int(o.split(",")[1].split(" ")[0].replace("-", ""))).first()
+orders.map(lambda o: int(o.split(",")[1].split(" ")[0].replace("-", ""))).take(10)
+orders.map(lambda o: int(o.split(",")[1].split(" ")[0].replace("-", ""))).count()
+
+#Create tuples
+orders.map(lambda o: (o.split(",")[3], 1))
+
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItems.first()
+for i in orderItems.take(10): print(i)
+orderItemsMap = orderItems. \
+map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+orderItemsMap.first()
+for i in orderItemsMap.take(10): print(i)
+
+--string-manipulation.py
+
+#String Manipulation
+orders = sc.textFile("/public/retail_db/orders")
+s = orders.first()
+
+#first character from a string
+s[0]
+
+#first 10 characters from a string
+s[:10]
+
+#get length of string
+len(s)
+
+#One way to get the date, but it will not work if the order id before first
+#comma is more than one character or digit
+s[2:12]
+
+#split and extract date
+s.split(",")
+type(s.split(","))
+#Get Date
+s.split(",")[1]
+#Get customer id
+s.split(",")[2]
+
+#type casting to integer
+int(s.split(",")[0])
+
+#type casting integer to string
+print("printing " + str(1))
+
+int(s.split(",")[1].split(" ")[0].replace("-", ""))
+
+--spark-filter.py
+
+orders = sc.textFile("/public/retail_db/orders")
+ordersComplete = orders. \
+filter(lambda o: 
+  o.split(",")[3] in ["COMPLETE", "CLOSED"] and o.split(",")[1][:7] == "2014-01")
+  
+--spark-join.py
+
+#joins
+orders = sc.textFile("/public/retail_db/orders")
+orderItems = sc.textFile("/public/retail_db/order_items")
+
+ordersMap = orders. \
+map(lambda o:(int(o.split(",")[0]), o.split(",")[1]))
+
+orderItemsMap = orderItems. \
+map(lambda oi:(int(oi.split(",")[1]), float(oi.split(",")[4])))
+
+ordersJoin = ordersMap.join(orderItemsMap)
+
+for i in ordersJoin.take(10): print(i)
+
+--spark-outer-join.py
+
+#outer join
+orders = sc.textFile("/public/retail_db/orders")
+orderItems = sc.textFile("/public/retail_db/order_items")
+
+ordersMap = orders. \
+map(lambda o:(int(o.split(",")[0]), o.split(",")[3]))
+
+orderItemsMap = orderItems. \
+map(lambda oi:(int(oi.split(",")[1]), float(oi.split(",")[4])))
+
+ordersLeftOuterJoin = ordersMap.leftOuterJoin(orderItemsMap)
+
+ordersLeftOuterJoinFilter = ordersLeftOuterJoin. \
+filter(lambda o: o[1][1] == None)
+
+for i in ordersLeftOuterJoin.take(10): print(i)
+
+ordersRightOuterJoin = orderItemsMap.rightOuterJoin(ordersMap)
+ordersRightOuterJoinFilter = ordersRightOuterJoin. \
+filter(lambda o: o[1][0] == None)
+
+for i in ordersRightOuterJoinFilter.take(10): print(i)
+
+--spark-compute-revenue-totals.py
+
+#Aggregations - total
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItems.count()
+
+#Aggregations - total - Get revenue for given order_id
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItemsFiltered = orderItems. \
+filter(lambda oi: int(oi.split(",")[1]) == 2)
+orderItemsSubtotals = orderItemsFiltered. \
+map(lambda oi: float(oi.split(",")[4]))
+
+from operator import add
+# orderItemsSubtotals.reduce(add)
+orderItemsSubtotals.reduce(lambda x, y: x + y)
+
+--spark-get-revenue-per-order-id.py
+
+#Get revenue for each order_id - reduceByKey
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItemsMap = orderItems. \
+map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+
+from operator import add
+revenuePerOrderId = orderItemsMap. \
+reduceByKey(add)
+
+revenuePerOrderId = orderItemsMap. \
+reduceByKey(lambda x, y: x + y)
+
+minSubtotalPerOrderId = orderItemsMap. \
+reduceByKey(lambda x, y: x if(x < y) else y)
+
+#Get order item details with minimum subtotal for each order_id
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItemsMap = orderItems. \
+map(lambda oi: (int(oi.split(",")[1]), oi))
+minSubtotalPerOrderId = orderItemsMap. \
+reduceByKey(lambda x, y: 
+  x if(float(x.split(",")[4]) < float(y.split(",")[4])) else y
+  )
+for i in minSubtotalPerOrderId.take(10): print(i)
+
+--spark-get-revenue-and-count-for-each-order-id.py
+
+#Get revenue and count of items for each order id - aggregateByKey
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItemsMap = orderItems. \
+map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+for i in orderItemsMap.take(10): print(i)
+revenuePerOrder = orderItemsMap. \
+aggregateByKey((0.0, 0), 
+  lambda x, y: (x[0] + y, x[1] + 1), 
+  lambda x, y: (x[0] + y[0], x[1] + y[1]))
+  
+--spark-sorting-data.py
+
+#Sort data by product price - sortByKey
+products = sc.textFile("/public/retail_db/products")
+productsMap = products. \
+filter(lambda p: p.split(",")[4] != ""). \
+map(lambda p: (float(p.split(",")[4]), p))
+productsSortedByPrice = productsMap.sortByKey()
+productsSortedMap = productsSortedByPrice. \
+map(lambda p: p[1])
+
+for i in productsSortedMap.take(10): print(i)
+
+--spark-composite-sorting.py
+
+#Sort data by product category and then product price descending - sortByKey
+
+products = sc.textFile("/public/retail_db/products")
+for i in products.take(10): print(i)
+productsMap = products. \
+filter(lambda p: p.split(",")[4] != ""). \
+map(lambda p: ((int(p.split(",")[1]), -float(p.split(",")[4])), p))
+
+for i in productsMap. \
+sortByKey(). \
+map(lambda p: p[1]). \
+take(1000): print(i)
+
+-- spark-min-revenue-totals.py
+
+# Get order item details which have minimum order_item_subtotal for given order_id
+orderItems = sc.textFile("/public/retail_db/order_items")
+
+orderItemsFiltered = orderItems. \
+filter(lambda oi: int(oi.split(",")[1]) == 2)
+orderItemsFiltered. \
+reduce(lambda x, y: 
+       x if(float(x.split(",")[4]) < float(y.split(",")[4])) else y
+      )
+	  
+--spark-get-count-by-status.py
+
+#Get count by status - countByKey
+orders = sc.textFile("/public/retail_db/orders")
+
+ordersStatus = orders. \
+map(lambda o: (o.split(",")[3], 1))
+
+countByStatus = ordersStatus.countByKey()
+for i in countByStatus: print(i)
+
+--spark-get-revenue-for-each-order.py
+
+#Get revenue for each order_id - groupByKey
+orderItems = sc.textFile("/public/retail_db/order_items")
+
+orderItemsMap = orderItems. \
+map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+
+orderItemsGroupByOrderId = orderItemsMap.groupByKey()
+revenuePerOrderId = orderItemsGroupByOrderId. \
+map(lambda oi: (oi[0], round(sum(oi[1]), 2)))
+
+for i in revenuePerOrderId.take(10): print(i)
+
+--spark-get-order-item-details-sorted.py
+
+#Get order item details in descending order by revenue - groupByKey
+orderItems = sc.textFile("/public/retail_db/order_items")
+
+orderItemsMap = orderItems. \
+map(lambda oi: (int(oi.split(",")[1]), oi))
+orderItemsGroupByOrderId = orderItemsMap.groupByKey()
+
+orderItemsSortedBySubtotalPerOrder = orderItemsGroupByOrderId. \
+flatMap(lambda oi: 
+  sorted(oi[1], key=lambda k: float(k.split(",")[4]), reverse=True)
+  )
+
+for i in orderItemsSortedBySubtotalPerOrder.take(10): print(i)
+
+--spark-get-revenue-for-each-order-id.py
+
+#Get revenue for each order_id - reduceByKey
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItemsMap = orderItems. \
+map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+
+from operator import add
+revenuePerOrderId = orderItemsMap. \
+reduceByKey(add)
+
+revenuePerOrderId = orderItemsMap. \
+reduceByKey(lambda x, y: x + y)
+
+minSubtotalPerOrderId = orderItemsMap. \
+reduceByKey(lambda x, y: x if(x < y) else y)
+
+--spark-get-revenue-for-each-order.py
+
+#Get revenue for each order_id - reduceByKey
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItemsMap = orderItems. \
+map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+
+from operator import add
+revenuePerOrderId = orderItemsMap. \
+reduceByKey(add)
+
+#Alternative way of adding for each key using reduceByKey
+revenuePerOrderId = orderItemsMap. \
+reduceByKey(lambda x, y: x + y)
+
+for i in revenuePerOrderId.take(10): print(i)
+
+--
+
+
+
+  
+
+
+
+
+  
+  
+
+
+	
+

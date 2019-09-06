@@ -1,0 +1,344 @@
+--hive_create_tables.hql
+
+use srikanth_oozie;
+drop table orders;
+drop table order_items;
+create external table orders (
+  order_id int,
+  order_date string,
+  order_customer_id int,
+  order_status string
+) row format delimited fields terminated by ','
+location '/user/srikanth/daily_revenue/orders';
+create external table order_items (
+  order_item_id int,
+  order_item_order_id int,
+  order_item_product_id int,
+  order_item_quantity int,
+  order_item_subtotal float,
+  order_item_price float 
+) row format delimited fields terminated by ','
+location '/user/srikanth/daily_revenue/order_items';
+
+--hive-create-retail_db.sql
+
+-- first create database using this command
+-- create database <database_name>;
+-- Switch to database
+-- use <database_name>;
+-- create tables and load data using below commands
+-- Run show tables to list the tables
+create table departments (
+department_id int,
+department_name string
+) row format delimited fields terminated by ',';
+
+create table categories (
+category_id int,
+category_department_id int,
+category_name string
+) row format delimited fields terminated by ',';
+
+create table products (
+product_id int,
+product_category_id int,
+product_name string,
+product_description string,
+product_price float,
+product_image string
+) row format delimited fields terminated by ',';
+
+create table order_items (
+order_item_id int,
+order_item_order_id int,
+order_item_product_id int,
+order_item_quantity int,
+order_item_subtotal float,
+order_item_product_price float
+) row format delimited fields terminated by ',';
+
+create table orders (
+order_id int,
+order_date string,
+order_customer_id int,
+order_status string
+) row format delimited fields terminated by ',';
+
+create table customers (
+customer_id int,
+customer_fname string,
+customer_lname string,
+customer_email string,
+customer_password string,
+customer_street string,
+customer_city string,
+customer_state string,
+customer_zipcode string
+) row format delimited fields terminated by ',';
+
+load data local inpath '/data/retail_db/departments' into table departments;
+load data local inpath '/data/retail_db/categories' into table categories;
+load data local inpath '/data/retail_db/products' into table products;
+load data local inpath '/data/retail_db/order_items' into table order_items;
+load data local inpath '/data/retail_db/orders' into table orders;
+load data local inpath '/data/retail_db/customers' into table customers;
+
+----hive-sample-commands.sql
+
+CREATE DATABASE training_hr;
+
+USE training_hr;
+
+CREATE TABLE employees (
+  employee_id     int,
+  first_name      varchar(20),
+  last_name       varchar(25),
+  email           varchar(25),
+  phone_number    varchar(20),
+  hire_date       date,
+  job_id          varchar(10),
+  salary          decimal(8,2),
+  commission_pct  decimal(2,2),
+  manager_id      int,
+  department_id   int
+) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+
+LOAD DATA LOCAL INPATH '/data/hr_db/employees' INTO TABLE employees;
+
+SET hive.cli.print.header=true;
+
+SELECT * FROM employees LIMIT 30;
+
+--cca175-problem-5-step-7-validation.sh
+
+// On Hive Window
+
+use problem5;
+
+insert into table products_hive 
+  values (1380,4,'something 1380','something 2',8.00,'not avaialble',3,'NOT APPLICABLE');
+insert into table products_hive 
+  values (1381,4,'something 1380','something 2',8.00,'not avaialble',3,'NOT APPLICABLE');
+
+// On MYSQL window
+create table products_external (
+  product_id int(11) primary Key, 
+  product_grade int(11), 
+  product_category_id int(11), 
+  product_name varchar(100), 
+  product_description varchar(100), 
+  product_price float, 
+  product_impage varchar(500), 
+  product_sentiment varchar(100)
+);
+
+// On Terminal 
+
+sqoop export \
+  --username "retail_dba" \
+  --password "cloudera" \
+  --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --export-dir /user/hive/warehouse/problem5.db/products_hive/ \
+  --fields-terminated-by '\001' \
+  --input-null-non-string "null" \
+  --input-null-string "null" \
+  --update-mode allowinsert \
+  --update-key product_id \
+  --columns "product_id,product_category_id,product_name,product_description,product_price,product_impage,product_grade,product_sentiment" \
+  --table products_external;
+
+// On Hive Window 
+
+insert into table products_hive 
+  values (1382,4,'something 1380','something 2',8.00,'not avaialble',3,'NOT APPLICABLE');
+insert into table products_hive 
+  values (1383,4,'something 1380','something 2',8.00,'not avaialble',3,'NOT APPLICABLE');
+
+// On Terminal Window:
+
+sqoop export \
+  --username "retail_dba" \
+  --password "cloudera" \
+  --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --export-dir /user/hive/warehouse/problem5.db/products_hive/ \
+  --fields-terminated-by '\001' \
+  --input-null-non-string "null" \
+  --input-null-string "null" \
+  --update-mode allowinsert \
+  --update-key product_id \
+  --columns "product_id,product_category_id,product_name,product_description,product_price,product_impage,product_grade,product_sentiment" \
+  --table products_external;
+
+// To Validate
+//  On Hive
+select count(*) from problem5.products_hive;
+// on MySQL
+select count(*) from products_replica;
+
+-- cca175-problem-5-step-6-sqoop-import.sh
+
+// On Terminal window-
+
+sqoop job \
+  --create hive_sqoop_job \
+  -- import \
+  --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --username "retail_dba" \
+  --password "cloudera" \
+  --table products_replica  \
+  --check-column product_id \
+  --incremental append \
+  --last-value 0 \
+  --hive-import \
+  --hive-table products_hive \
+  --hive-database problem5;
+
+// On Hive window:
+
+create database problem5;
+
+use problem5;
+create table products_hive (
+  product_id int, 
+  product_category_id int, 
+  product_name string, 
+  product_description string, 
+  product_price float, 
+  product_imaage string,
+  product_grade int,  
+  product_sentiment string
+);
+
+// On Terminal window
+
+sqoop job --exec hive_sqoop_job
+
+// On MySQL window
+
+insert into products_replica 
+  values (1378,4,'something 1376','something 2',10.00,'not avaialble',null,'NOT APPLICABLE');
+insert into products_replica 
+  values (1379,4,'something 1376','something 2',10.00,'not avaialble',null,'NOT APPLICABLE');
+
+// On Terminal Window
+
+sqoop job --exec hive_sqoop_job
+
+// On Hive Window
+
+select * from products_hive;
+
+--cca175-problem-03-hive-query.sql
+select * from orders_sqoop as X 
+  where X.order_date in 
+    (select i.order_date from 
+      (select Y.order_date, count(1) as total_orders from orders_sqoop as Y 
+        group by Y.order_date order by total_orders desc, Y.order_date desc limit 1
+      ) i
+    );
+    
+//Using windowing or analytical functions
+
+select * from (
+  select a.*, dense_rank() over (order by order_count desc) rnk from (
+    select os.*, count(1) over (partition by order_date) order_count from orders_sqoop os
+  ) a
+) b where rnk = 1;
+
+--cca175-problem-03-create-hive-table.sh
+
+// Copy data from HDFS to local file system
+hadoop fs -get /user/hive/warehouse/retail_stage.db/orders/part-m-00000.avro
+avro-tools getschema part-m-00000.avro > orders.avsc
+
+// Create HDFS directory /user/hive/schemas to keep avro schema files generated as part of previous sqoop command
+// Do not use /user/hive in actual projects. /user/hive is special directory
+// Probably you might have to use directories specific to your application
+hadoop fs -mkdir /user/hive/schemas
+hadoop fs -copyFromLocal orders.avsc /user/hive/schemas/order
+hadoop fs -ls /user/hive/schemas/order
+
+
+// Launch HIVE using 'hive' command in a separate terminal
+// Below HIVE command will create a table pointing to the avro data file for orders data
+// Table will be created in default database in this case
+create external table orders_sqoop
+STORED AS AVRO
+LOCATION '/user/hive/warehouse/retail_stage.db/orders'
+TBLPROPERTIES ('avro.schema.url'='/user/hive/schemas/order/orders.avsc')
+
+--orders-order_items_tables_txt.sql
+
+create table orders (
+order_id int,
+order_date string,
+order_customer_id int,
+order_status string
+) row format delimited fields terminated by ','
+stored as textfile;
+
+load data local inpath '/data/retail_db/orders' into table orders;
+
+create table order_items (
+order_item_id int,
+order_item_order_id int,
+order_item_product_id int,
+order_item_quantity int,
+order_item_subtotal float,
+order_item_product_price float
+) row format delimited fields terminated by ','
+stored as textfile;
+
+load data local inpath '/data/retail_db/order_items' into table order_items;
+
+--orders&order_items_tables_orc.sql
+create database dgadiraju_retail_db_orc;
+use dgadiraju_retail_db_orc;
+
+create table orders (
+order_id int,
+order_date string,
+order_customer_id int,
+order_status string
+) stored as orc;
+
+insert into table orders select * from dgadiraju_retail_db_txt.orders;
+
+create table order_items (
+order_item_id int,
+order_item_order_id int,
+order_item_product_id int,
+order_item_quantity int,
+order_item_subtotal float,
+order_item_product_price float
+) stored as orc;
+
+insert into table order_items select * from dgadiraju_retail_db_txt.order_items;
+
+--HDPCD-Joins.sql
+
+select o.*, c.* from orders o, customers c
+where o.order_customer_id = c.customer_id
+limit 10;
+
+select o.*, c.* from orders o inner join customers c
+on o.order_customer_id = c.customer_id
+limit 10;
+
+select o.*, c.* from customers c left outer join orders o
+on o.order_customer_id = c.customer_id
+limit 10;
+
+select count(1) from orders o inner join customers c
+on o.order_customer_id = c.customer_id;
+
+select count(1) from customers c left outer join orders o
+on o.order_customer_id = c.customer_id;
+
+select c.* from customers c left outer join orders o
+on o.order_customer_id = c.customer_id
+where o.order_customer_id is null;
+
+select * from customers where customer_id not in (select distinct order_customer_id from orders);
+
+--

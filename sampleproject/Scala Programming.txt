@@ -1,0 +1,4627 @@
+--Hadopp HDFS
+-- Create directory cards under home
+mkdir cards
+-- Copy largedeck.txt file to the gateway node and place it in cards directory under home directory
+cp /data/cards/* ~/cards
+
+-- If you want to copy other files you have to use scp/winscp from your PC to gateway
+
+-- Confirm largedeck.txt is available under your home directory
+ls -ltr ~/cards
+
+-- Copy directory from your local file system to HDFS
+hadoop fs -copyFromLocal ~/cards /user/training/cards
+
+-- Validate the directory cards and files are available
+hadoop fs -ls -R /user/training/cards
+
+
+--Login to mysql CLI
+mysql -u retail_dba -h nn01.namenode.com -p
+
+show databases;
+use retail_db;
+show tables;
+select * from departments;
+
+--scala-helloworld.scala program
+
+object hw {
+  def main(args: Array[String]) {
+    println("Hello World!")
+  }
+}
+
+--sample-build.sbt
+name := "hw"
+version := "1.0"
+scalaVersion := "2.11.8"
+
+libraryDependencies += "com.typesafe" % "config" % "1.3.1"
+libraryDependencies += "mysql" % "mysql-connector-java" % "5.1.36"
+
+--scala-declaring-variables.scala
+
+//Immutable
+val i = 10 //Smart enough to figure out the data type
+val i: Int = 0 //Data type can be defined explicitly as well
+//This does not work i = i + 1, as i is defined as immutable (val)
+
+//Mutable
+var j = 20
+j = j + 1
+
+--scala-programming-constructs.scala
+
+//Expression
+println("********")
+println("Expression")
+val c = {
+  val i = (math.random * 100).toInt
+  val j = (math.random * 100).toInt
+  i - j
+}
+println(c)
+
+//Nested block
+val a = {
+  val x = 0
+  val y = 1
+  val b = {
+    val y = 2
+    println("value of x inside nested block is " + x)
+    println("value of y inside nested block is " + y)
+  }
+  println("value of x inside main block is " + x)
+  println("value of y inside main block is " + y)
+}
+
+
+println("********")
+println("Another Expression")
+val sqr = {
+  val a = 1
+  val b:Long = 23L
+  val hi = "hi"
+  true
+}
+println(sqr)
+
+// Start writing your ScalaFiddle code here
+//if-else-if-else
+val i = 10
+val j = 20
+println("********")
+println("if else")
+if(i > j) {
+  println(i)
+} else if(i == j) {
+  println("Equal")
+} else {
+  println(j)
+}
+
+
+//ternary operator, it uses if else
+println("********")
+println("Ternary")
+if(i > j) println(i) else println(j)
+
+//while loop
+println("********")
+println("While loop")
+var ctr = 0
+while(ctr <= i) {
+  println(ctr)
+  ctr += 1
+}
+
+//for loop
+ctr = 5
+println("********")
+println("For loop")
+for(a <- ctr to j) {
+  println(a)
+}
+
+println("********")
+println("For loop increment by constant")
+val constant = 2
+for(a <- ctr to j by constant) {
+  println(a)
+}
+
+println("********")
+println("For loop decrement by constant")
+for(a <- j to ctr by -constant) {
+  println(a)
+}
+
+--scala-functions.scala
+
+//Creating functions
+
+def addIntegers(i: Int, j: Int): Int = {
+  i + j
+}
+
+//Anonymous function assigned to a variable
+val addIntegers = (i: Int, j: Int) => {
+  i + j
+}
+
+//Invocation
+addIntegers(1, 2)
+
+--scala-closures.scala
+
+// closure example
+def m2: Int => Int = {
+  val factor = 2
+  val multiplier = (i: Int) => i * factor
+  multiplier
+}
+
+--spark-scala-word-count.scala
+val inputPath = "/Users/srikanth/Research/data/wordcount.txt" or val inputPath = "/public/randomtextwriter/part-m-00000"
+val outputPath = "/Users/srikanth/Research/data/wordcount" or val outputPath = "/user/srikanth/wordcount"
+//Make sure outputPath does not exist for this example
+
+sc.textFile(inputPath).
+  flatMap(_.split(" ")).
+  map((_, 1)).
+  reduceByKey(_ + _).
+  take(100).
+  foreach(println)
+
+//alternative
+sc.textFile(inputPath).
+  flatMap(line => line.split(" ").map(rec => (rec, 1))).
+  reduceByKey(_ + _).
+  take(100).
+  foreach(println)
+
+//Saving to file
+sc.textFile(inputPath).
+  flatMap(_.split(" ")).
+  map((_, 1)).
+  reduceByKey(_ + _).
+  map(rec => rec._1 + "\t" + rec._2).
+  saveAsTextFile(outputPath)
+  
+--scala-spark-spark-conf.scala
+val conf = new SparkConf().
+      setAppName("Word Count).
+      setMaster("local")
+	  
+--spark-scala-word-count-config.scala
+
+package wordcount
+
+/**
+  * Created by srikanth 
+  * spark-submit
+spark-submit \
+  --class WordCount \
+  /Users/srikanth/IdeaProjects/sands/target/scala-2.10/sands_2.10-1.0.jar \
+  dev /Users/srikanth/Research/data/wordcount.txt /Users/srikanth/Research/data/wc
+  */
+
+import org.apache.hadoop.fs._
+import com.typesafe.config.{Config, ConfigFactory}
+import org.apache.spark.{SparkConf, SparkContext}
+
+object WordCount {
+
+  def main(args: Array[String]) = {
+    val executionEnvironment = args(0)
+    val props: Config = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Word Count").
+      setMaster(props.getConfig(executionEnvironment).getString("executionMode"))
+    val sc = new SparkContext(conf)
+
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+
+    val inputPath = args(1)
+    val outputPath = args(2)
+
+    if(!fs.exists(new Path(inputPath))) {
+      println("Input path does not exist")
+    } else {
+      if(fs.exists(new Path(outputPath)))
+        fs.delete(new Path(outputPath), true)
+      sc.textFile(inputPath).
+        flatMap(rec => rec.split(" ")).
+        map(rec => (rec.replace(",", ""), 1)). 
+     // above line can be added if you want to discard punctuation marks while performing word count
+        reduceByKey(_ + _).
+        map(rec => rec.productIterator.mkString("\t")).
+     // alternative - map(rec => rec._1 + "\t" + rec._2).
+        saveAsTextFile(outputPath)
+    }
+  }
+}
+  
+--spark-scala-conf-build.sbt
+name := "demo-spark-scala"
+version := "1.0"
+scalaVersion := "2.11.8"
+
+libraryDependencies += "org.apache.spark" % "spark-core_2.11" % "1.6.2"
+libraryDependencies += "com.typesafe" % "config" % "1.3.0"
+
+--spark-scala-word-count-externalized.scala
+
+package wordcount
+
+import com.typesafe.config._
+import org.apache.spark.SparkContext, org.apache.spark.SparkConf
+import org.apache.hadoop.fs._
+
+
+object WordCount {
+  def main(args: Array[String]) {
+    val appConf = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Word Count").
+      setMaster(appConf.getConfig(args(2)).getString("executionMode"))
+
+    for(c <- conf.getAll)
+      println(c._2)
+    val sc = new SparkContext(conf)
+    val inputPath = args(0)
+    val outputPath = args(1)
+
+    // We need to use HDFS FileSystem API to perform validations on input and output path
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val inputPathExists = fs.exists(new Path(inputPath))
+    val outputPathExists = fs.exists(new Path(outputPath))
+
+    if(!inputPathExists) {
+      println("Invalid input path")
+      return
+    }
+
+    if(outputPathExists)
+      fs.delete(new Path(outputPath), true)
+
+    val wc = sc.textFile(inputPath).
+      flatMap(rec => rec.split(" ")).
+      map(rec => (rec, 1)).
+      reduceByKey((acc, value) => acc + value)
+
+    // changing tuple to delimited text before saving the output
+    // We can also use map(rec => rec._1 + "\t" + rec._2)
+    wc.
+      map(rec => rec.productIterator.mkString("\t")).
+      saveAsTextFile(outputPath)
+
+  }
+}
+
+--scala-jdbc.scala
+
+/**
+  * Created by srikanth 
+  */
+
+import java.sql.DriverManager
+import com.typesafe.config._
+
+case class EmployeesCommission(first_name: String,
+                               last_name: String,
+                               salary: Double,
+                               commission_pct: Double) {
+  override def toString(): String = {
+    s"first_name: " + first_name + ";" + "last_name: " + last_name +
+      ";" + "commission amount:" + getCommissionAmount()
+  }
+
+  def getCommissionAmount(): Any = {
+    if(commission_pct == null) {
+      "Not eligible"
+    } else salary * commission_pct
+  }
+}
+
+object CommissionAmount {
+  def main(args: Array[String]): Unit = {
+    val props = ConfigFactory.load()
+    val driver = "com.mysql.jdbc.Driver"
+    val host = props.getConfig(args(0)).getString("host")
+    val port = props.getConfig(args(0)).getString("port")
+    val db = props.getConfig(args(0)).getString("db")
+    val url = "jdbc:mysql://" + host + ":" + port + "/" + db
+    val username = props.getConfig(args(0)).getString("user")
+    val password = props.getConfig(args(0)).getString("pw")
+
+    Class.forName(driver);
+    val connection = DriverManager.getConnection(url, username, password)
+    val statement = connection.createStatement()
+    val resultSet = statement.executeQuery(s"SELECT first_name, last_name, " +
+       "salary, commission_pct FROM employees")
+
+    Iterator.
+      continually((resultSet.next(), resultSet)).
+      takeWhile(_._1).
+      map(r => {
+        EmployeesCommission(
+          r._2.getString("first_name"),
+          r._2.getString("last_name"),
+          r._2.getDouble("salary"),
+          r._2.getDouble("commission_pct")
+        )
+      }).
+      toList.
+      foreach(println)
+
+//    while (resultSet.next()) {
+//      val e = EmployeesCommission(resultSet.getString("first_name"),
+//        resultSet.getString("last_name"),
+//        resultSet.getDouble("salary"),
+//        if(resultSet.getDouble("commission_pct").isNaN) -1.0 else resultSet.getDouble("commission_pct"))
+//      println(e)
+//    }
+
+
+  }
+}
+
+--scala-build.sbt
+name := "wlabs"
+
+version := "1.0"
+
+scalaVersion := "2.11.8"
+
+libraryDependencies += "mysql" % "mysql-connector-java" % "5.1.36"
+
+libraryDependencies += "com.typesafe" % "config" % "1.3.1"
+
+libraryDependencies += "org.apache.spark" % "spark-core_2.10" % "1.6.2"
+
+--scala-application.properties
+
+--scala-application.properties
+dev.host = nn01.namenode.com
+dev.port = 3306
+dev.db = hr
+dev.user = hr_ro
+dev.pw = cloudera
+
+--scala-spark-election-analysis.scala
+//Here is the exercise - http://exercise-09-scala-and-spark-political-analysis-for-the-state-of-up/2907
+
+val fileContents = sc.
+  textFile("/Users/srikanth/Research/data/elections/ls2014.tsv")
+val data = fileContents.
+  mapPartitionsWithIndex((idx, iter) => if (idx == 0) iter.drop(1) else iter)
+val upData = data.filter(_.split("\t")(0) == "Uttar Pradesh")
+val upDataMap = upData.
+  map(rec => 
+    {
+      val r = rec.split("\t")
+      ((r(0), r(1)), (r(6), r(8).toInt))
+    })
+
+def recalculateWithAlliance(rec: Iterable[(String, Int)]): Iterable[(String, Int)] = {
+  rec.map(r => {
+    if(r._1 == "INC" || r._1 == "SP")
+      ("ALLY", r._2)
+    else
+      r
+  }).
+  groupBy(r => r._1).
+  map(r => (r._1, r._2.map(_._2).sum))
+}
+
+//4 way contest
+upDataMap.
+  groupByKey().
+  map(rec => {
+    (rec._1, rec._2.toList.sortBy(s => -s._2))
+  }).
+  map(rec => (rec._2(0)._1, 1)).
+  countByKey().
+  foreach(println)
+
+//3 way contest after alliance
+upDataMap.
+  groupByKey().
+  map(rec => (rec._1, recalculateWithAlliance(rec._2))).
+  map(rec => {
+    (rec._1, rec._2.toList.sortBy(s => -s._2))
+  }).
+  map(rec => (rec._2(0)._1, 1)).
+  countByKey().
+  foreach(println)
+
+--scala-spark-topNProducts.scala
+
+val l = ("Bike & Skate Shop", Iterable("933,42,Nike VR_S Covert Driver,,179.99,http://images.acmesports.sports/Nike+VR_S+Covert+Driver", 
+"934,42,Callaway X Hot Driver,,0.0,http://images.acmesports.sports/Callaway+X+Hot+Driver", 
+"935,42,TaylorMade RocketBallz Stage 2 Driver,,169.99,http://images.acmesports.sports/TaylorMade+RocketBallz+Stage+2+Driver", 
+"936,42,Cleveland Golf Classic XL Driver,,119.99,http://images.acmesports.sports/Cleveland+Golf+Classic+XL+Driver", 
+"937,42,Cobra AMP Cell Driver - Orange,,169.99,http://images.acmesports.sports/Cobra+AMP+Cell+Driver+-+Orange"))
+
+def topNProducts(rec: (String, Iterable[String]), topN: Int): Iterable[(String, String)] = {
+  rec._2.toList.sortBy(k => -k.split(",")(4).toFloat).take(topN).map(r => (rec._1, r))
+}
+
+val products = sc.textFile("/public/retail_db/products")
+val productsFiltered = products.filter(rec => rec.split(",")(4) != "")
+val productsMap = productsFiltered.map(rec => (rec.split(",")(1).toInt, rec))
+
+val categories = sc.textFile("/public/retail_db/categories").
+  map(rec => (rec.split(",")(0).toInt, rec.split(",")(2)))
+
+val productsJoin = productsMap.
+  join(categories).
+  map(rec => (rec._2._2, rec._2._1))
+val productsGroupByCategory = productsJoin.groupByKey()
+productsGroupByCategory.
+  flatMap(rec => topNProducts(rec, 3)).
+  collect().
+  foreach(println)
+  
+--scala-spark-topNPricedProducts.scala
+
+val l = ("Bike & Skate Shop", Iterable("933,42,Nike VR_S Covert Driver,,179.99,http://images.acmesports.sports/Nike+VR_S+Covert+Driver", 
+"934,42,Callaway X Hot Driver,,0.0,http://images.acmesports.sports/Callaway+X+Hot+Driver", 
+"935,42,TaylorMade RocketBallz Stage 2 Driver,,169.99,http://images.acmesports.sports/TaylorMade+RocketBallz+Stage+2+Driver", 
+"936,42,Cleveland Golf Classic XL Driver,,119.99,http://images.acmesports.sports/Cleveland+Golf+Classic+XL+Driver", 
+"937,42,Cobra AMP Cell Driver - Orange,,169.99,http://images.acmesports.sports/Cobra+AMP+Cell+Driver+-+Orange"))
+
+def topNPricedProducts(rec: (String, Iterable[String]), topN: Int): Iterable[(String, String)] = {
+  val list = rec._2.toList
+  val topNPrices = list.
+    map(rec => rec.split(",")(4).toFloat).
+    sortBy(k => -k).distinct.take(topN)
+  val sortedList = list.sortBy(k => -k.split(",")(4).toFloat)
+  sortedList.
+    filter(r => topNPrices.contains(r.split(",")(4).toFloat)).
+    map(r => (rec._1, r))
+}
+
+val products = sc.textFile("/public/retail_db/products")
+val productsFiltered = products.filter(rec => rec.split(",")(4) != "")
+val productsMap = productsFiltered.map(rec => (rec.split(",")(1).toInt, rec))
+
+val categories = sc.textFile("/public/retail_db/categories").
+  map(rec => (rec.split(",")(0).toInt, rec.split(",")(2)))
+
+val productsJoin = productsMap.
+  join(categories).
+  map(rec => (rec._2._2, rec._2._1))
+val productsGroupByCategory = productsJoin.groupByKey()
+productsGroupByCategory.
+  flatMap(rec => topNPricedProducts(rec, 2)).
+  collect().
+  foreach(println)
+
+--scala-spark-file-formats.scala
+
+//This is just a script not a program
+//Execute these things as part of Spark Shell
+
+//Writing as sequence file
+import org.apache.hadoop.io._
+val products = sc.textFile("/public/retail_db/products")
+products.map(rec => (NullWritable.get(), rec)).
+  saveAsSequenceFile("/user/srikanth/products_seq")
+
+//Reading sequnce files
+sc.sequenceFile("/user/srikanth/products_seq", classOf[NullWritable], classOf[Text]).
+  map(rec => rec._2.toString()).
+  collect().
+  foreach(println)
+
+//Writing using saveAsNewAPIHadoopFile (approach for any Hadoop new API file format)
+val products = sc.textFile("/public/retail_db/products")
+val productsMap = products.
+  map(rec => (new IntWritable(rec.split(",")(0).toInt), new Text(rec)))
+
+import org.apache.hadoop.io._
+import org.apache.hadoop.mapreduce.lib.output._
+
+productsMap.
+  saveAsNewAPIHadoopFile("/user/srikanth/products_seq", classOf[IntWritable], classOf[Text], classOf[SequenceFileOutputFormat[IntWritable, Text]])
+
+//Reading using newAPIHadoopFile (approach for any Hadoop new API file format)
+import org.apache.hadoop.io._
+import org.apache.hadoop.mapreduce.lib.input._
+
+sc.newAPIHadoopFile("/user/srikanth/products_seq", classOf[SequenceFileInputFormat[IntWritable, Text]], classOf[IntWritable], classOf[Text])
+
+sc.newAPIHadoopFile("/user/srikanth/products_seq", classOf[SequenceFileInputFormat[IntWritable, Text]], classOf[IntWritable], classOf[Text]).map(rec => rec.toString()).collect().foreach(println)
+
+--SparkStreamingWordCount.scala
+
+/**
+  * Created bysrikanth
+  * This is primarily to get the word count on the data received from 
+  * nc -lk 19999
+  * Make sure build.sbt is updated with the dependency - 
+  * libraryDependencies += "org.apache.spark" % "spark-streaming_2.10" % "1.6.2"
+  * Create jar, ship the jar, start nc, and then use spark-submit
+  * spark-submit --class SparkStreamingWordCount --master yarn --conf spark.ui.port=14562 retail_2.10-1.0.jar
+  */
+import org.apache.spark.SparkConf
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming._
+
+object SparkStreamingWordCount {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("Testing Streaming").setMaster("yarn-client")
+    val ssc = new StreamingContext(conf, Seconds(10))
+
+    val lines = ssc.socketTextStream("gw01.namenode.com", 19999)
+    val linesFlatMap = lines.flatMap(rec => rec.split(" "))
+    val linesMap =  linesFlatMap.map((_, 1))
+    val linesRBK = linesMap.reduceByKey(_ + _)
+
+    linesRBK.print()
+
+    ssc.start()
+    ssc.awaitTermination()
+  }
+
+}
+
+--FlumeAndSparkStreaming-example.scala
+
+/**
+  * Created by srikanth 
+  */
+
+/* build.sbt
+name := "retail"
+
+version := "1.0"
+
+scalaVersion := "2.10.6"
+
+libraryDependencies += "org.apache.spark" % "spark-core_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-sql_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-hive_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-streaming_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-streaming-flume_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-streaming-flume-sink_2.10" % "1.6.2"
+*/
+
+/* spark submit command
+// Build jar file, ship it to cluster, make sure jars files are available as specified under jars
+// Then run spark-submit
+spark-submit --class FlumeSparkWordCount \
+  --master yarn \
+  --conf spark.ui.port=22231 \
+  --jars "/usr/hdp/2.5.0.0-1245/spark/lib/spark-streaming-flume_2.10-1.6.2.jar,/usr/hdp/2.5.0.0-1245/spark/lib/spark-streaming_2.10-1.6.2.jar,/usr/hdp/2.5.0.0-1245/flume/lib/commons-lang3-3.5.jar,/usr/hdp/2.5.0.0-1245/spark/lib/spark-streaming-flume-sink_2.10-1.6.2.jar,/usr/hdp/2.5.0.0-1245/flume/lib/flume-ng-sdk-1.5.2.2.5.0.0-1245.jar" \
+  retail_2.10-1.0.jar
+*/
+
+import org.apache.spark.SparkConf
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.flume._
+
+object FlumeSparkWordCount {
+  def main(args: Array[String]): Unit = {
+    val batchInterval = Seconds(30)
+    val sparkConf = new SparkConf().setAppName("FlumePollingEventCount").setMaster("yarn-client")
+    val ssc = new StreamingContext(sparkConf, batchInterval)
+    val host = "gw01.srikanth.com"
+    val port = 19999
+
+    val stream: ReceiverInputDStream[SparkFlumeEvent] = FlumeUtils.
+      createPollingStream(ssc, host, port)
+//    stream.map(e => new String(e.event.getBody.array())).print
+    stream.map(e => new String(e.event.getBody.array())).
+      filter(rec => rec.contains("GET /department/")).
+      map(rec => (rec.split(" ")(6).split("/")(2), 1)).
+      reduceByKey(_ + _).
+      print()
+
+//    val streamMap = stream.map(e => new String(e.event.getBody.array()))
+//    val streamFilter = streamMap.
+//      filter(rec => rec.contains("GET /department/"))
+//    val departmentMap = streamFilter.
+//      map(rec => (rec.split(" ")(6).split("/")(2), 1))
+//    val countByDepartment: DStream[(String, Int)] = departmentMap.
+//      reduceByKey((agg, value) => agg + value)
+//    countByDepartment.map(rec => rec).print()
+
+    ssc.start()
+    ssc.awaitTermination()
+
+  }
+
+}
+
+--FlumeKafkaAndSparkStreaming-example.scala
+package retail
+
+
+/**
+  * Created by srikanth
+  */
+
+/* build.sbt
+name := "retail"
+
+version := "1.0"
+
+scalaVersion := "2.10.6"
+
+libraryDependencies += "org.apache.spark" % "spark-core_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-sql_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-hive_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-streaming_2.10" % "1.6.2"
+//libraryDependencies += "org.apache.spark" % "spark-streaming-flume_2.10" % "1.6.2"
+//libraryDependencies += "org.apache.spark" % "spark-streaming-flume-sink_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-streaming-kafka_2.10" % "1.6.2"
+*/
+
+/* spark submit command
+spark-submit --class StreamingDepartmentAnalysis \
+  --master yarn \
+  --conf spark.ui.port=22231 \
+  --jars "/usr/hdp/2.5.0.0-1245/spark/lib/spark-streaming_2.10-1.6.2.jar,/usr/hdp/2.5.0.0-1245/kafka/libs/spark-streaming-kafka_2.10-1.6.2.jar,/usr/hdp/2.5.0.0-1245/kafka/libs/kafka_2.10-0.8.2.1.jar,/usr/hdp/2.5.0.0-1245/kafka/libs/metrics-core-2.2.0.jar" \
+  retail_2.10-1.0.jar /user/srikanth/streaming/streamingdepartmentanalysis
+*/
+
+/* flume and kafka integration configuration file
+# Name the components on this agent
+kandf.sources = logsource
+kandf.sinks = ksink
+kandf.channels = mchannel
+
+# Describe/configure the source
+kandf.sources.logsource.type = exec
+kandf.sources.logsource.command = tail -F /opt/gen_logs/logs/access.log
+
+# Describe the sink
+kandf.sinks.ksink.type = org.apache.flume.sink.kafka.KafkaSink
+kandf.sinks.ksink.brokerList = nn02.srikanth.com:6667
+kandf.sinks.ksink.topic = kafkadg
+
+# Use a channel which buffers events in memory
+kandf.channels.mchannel.type = memory
+kandf.channels.mchannel.capacity = 1000
+kandf.channels.mchannel.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+kandf.sources.logsource.channels = mchannel
+kandf.sinks.ksink.channel = mchannel
+*/
+import kafka.serializer.StringDecoder
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.kafka._
+import org.apache.spark.SparkConf
+import org.apache.spark.streaming.dstream.InputDStream
+
+object StreamingDepartmentAnalysis {
+  def main(args: Array[String]) {
+    val sparkConf = new SparkConf().
+      setAppName("DepartmentWiseCount").setMaster("yarn-client")
+    val topicsSet = "kafkadg".split(",").toSet
+    val kafkaParams =
+      Map[String, String]("metadata.broker.list" -> "nn01.srikanth.com:6667,nn02.srikanth.com:6667,rm01.srikanth.com:6667")
+    val ssc = new StreamingContext(sparkConf, Seconds(60))
+    val messages: InputDStream[(String, String)] = KafkaUtils.
+      createDirectStream[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, topicsSet)
+
+    val lines = messages.map(_._2)
+    val linesFiltered = lines.filter(rec => rec.contains("GET /department/"))
+    val countByDepartment = linesFiltered.
+      map(rec => (rec.split(" ")(6).split("/")(2), 1)).
+      reduceByKey(_ + _)
+    //        reduceByKeyAndWindow((a:Int, b:Int) => (a + b), Seconds(300), Seconds(60))
+    //    countByDepartment.saveAsTextFiles(args(0))
+    // Below function call will save the data into HDFS
+    countByDepartment.saveAsTextFiles(args(0))
+    ssc.start()
+    ssc.awaitTermination()
+  }
+}
+
+--spark-scala-DailyRevenuePerDayPerDepartment.scala
+
+package retail
+
+import com.typesafe.config.ConfigFactory
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.{SparkConf, SparkContext}
+
+/**
+  * Created by srikanth 
+  */
+object DailyRevenuePerDayPerDepartment {
+  def main(args: Array[String]) {
+    val appConf = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Revenue by department per day").
+      setMaster(appConf.getConfig(args(2)).getString("executionMode"))
+    val sc = new SparkContext(conf)
+
+    val inputPath = args(0)
+    val outputPath = args(1)
+
+    // We need to use HDFS FileSystem API to perform validations on input and output path
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val inputPathExists = fs.exists(new Path(inputPath))
+    val outputPathExists = fs.exists(new Path(outputPath))
+
+    if(!inputPathExists) {
+      println("Invalid input path")
+      return
+    }
+
+    if(outputPathExists)
+      fs.delete(new Path(outputPath), true)
+
+    // Joining categories and departments
+    // Generate (K, V) and (K, W) pair where
+    // K = department_id, V = department_name, W = category_id
+    val departments = sc.textFile(inputPath + "/departments")
+    val categories = sc.textFile(inputPath + "/categories")
+    val cdjoin = departments.map(rec => (rec.split(",")(0).toInt, rec.split(",")(1))).
+      join(categories.map(rec => (rec.split(",")(1).toInt, rec.split(",")(0).toInt)))
+    // After join the RDD will have elements of type
+    // (K, (V, W)) = (department_id, (department_name, category_id))
+
+    // Joining products with cdjoin
+    // (category_id, department_name) from cdjoin is joined with
+    // (product_category_id, product_id) from products
+    val products = sc.textFile(inputPath + "/products")
+    val cdpjoin = cdjoin.map(rec => (rec._2._2, rec._2._1)).
+      join(products.map(rec => (rec.split(",")(1).toInt, rec.split(",")(0).toInt)))
+    // Output after join will be
+    // (category_id, (department_name, product_id))
+
+    // Getting (order_item_product_id, (order_item_order_id, order_item_subtotal))
+    // from order_items
+    val orderItems = sc.
+      textFile(inputPath + "/order_items").
+      map(rec => (rec.split(",")(2).toInt, (rec.split(",")(1).toInt, rec.split(",")(4).toDouble)))
+
+    // Joining (order_item_product_id, (order_item_order_id, order_item_subtotal)) from order_items
+    // with (product_id, department_name) from cdpjoin
+    val cdpojoin = cdpjoin.map(rec => (rec._2._2, rec._2._1)).
+      join(orderItems)
+    // Output after join
+    // (product_id, (order_item_order_id, order_item_subtotal))
+
+    // Getting (order_id, order_date) for completed or closed orders
+    val orders = sc.textFile(inputPath + "/orders").
+      filter(rec => rec.split(",")(3) == "COMPLETE" || rec.split(",")(3) == "CLOSED").
+      map(rec => (rec.split(",")(0).toInt, rec.split(",")(1)))
+
+    // Joining (order_id, order_date) with
+    // (order_item_order_id, (department_name, order_item_subtotal))
+    val cdpoojoin = cdpojoin.
+      map(rec => (rec._2._2._1, (rec._2._1, rec._2._2._2))).
+      join(orders)
+    // output after join
+    // (order_id, ((deparment_name, order_item_subtotal), order_date)
+
+    // Get data in this format with order_date and department_name as key
+    // ((order_date, department_name), order_item_subtotal)
+    // Use reduceByKey to aggregate the data using order_date and department_name as key
+    // Use sortByKey to sort the data by date and then department_name
+    // Use map to transform data to tab delimited and then save to file in text format
+    cdpoojoin.
+      map(rec => ((rec._2._2, rec._2._1._1), rec._2._1._2)).
+      reduceByKey(_ + _).
+      sortByKey().
+      map(rec => rec._1._1 + "\t" + rec._1._2 + "\t" + rec._2).
+      saveAsTextFile(outputPath)
+  }
+
+}
+--spark-scala-TopNStocksByVolume.scala
+
+package nyse
+
+import com.typesafe.config.ConfigFactory
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.{SparkConf, SparkContext}
+
+/**
+  * Created by srikanth
+  */
+object TopNStocksByVolume {
+  def main(args: Array[String]) {
+    val appConf = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Top n stocks by volume").
+      setMaster(appConf.getConfig(args(2)).getString("executionMode"))
+    val sc = new SparkContext(conf)
+
+    val inputPath = args(0)
+    val outputPath = args(1)
+
+    // We need to use HDFS FileSystem API to perform validations on input and output path
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val inputPathExists = fs.exists(new Path(inputPath))
+    val outputPathExists = fs.exists(new Path(outputPath))
+
+    if (outputPathExists)
+      fs.delete(new Path(outputPath), true)
+
+    // coalesce is used to reduce number of tasks to process data spread across
+    // many small files
+    val data = sc.textFile(inputPath).
+      coalesce(4)
+
+    data.
+      // Get date in YYYYMM format and stock ticker as key and volume as value
+      map(rec => {
+        val a = rec.split(",")
+        ((a(1).substring(0, 6).toInt, a(0)), a(6).toInt)
+      }).
+      // Aggregate and get volume for each stock for each month
+      reduceByKey(_ + _).
+      // Move stock ticker to value, now key is trade month
+      map(rec => (rec._1._1, (rec._2, rec._1._2))).
+      // Group by trade month
+      // Output will be (trademonth, List((stockticker, volume)))
+      groupByKey().
+      // Process the list to compute topN stocks by volume for each key
+      // This simulate dense rank functionality
+      flatMap(rec => {
+        // get topN volumes
+        val topNVolumes = rec._2.
+          toList.
+          map(_._1).
+          sortBy(-_).
+          distinct.
+          take(args(3).toInt)
+
+        // Check whether the volume of stock falls in topNVolumes
+        rec._2.
+          toList.
+          sortBy(r => -r._1).
+          filter(r => topNVolumes.contains(r._1)).
+          map(r => (rec._1, r))
+      }).
+      // sort the data by trade month
+      sortByKey().
+      // format data to be tab delimited
+      map(rec => rec._1 + "\t" + rec._2._1 + "\t" + rec._2._2).
+      saveAsTextFile(outputPath)
+  }
+}
+
+--spark-scala-Accumulators-and-Broadcast-variables-TopNStocksByVolumeWithName.scala
+
+package nyse
+
+import com.typesafe.config.ConfigFactory
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.{SparkConf, SparkContext}
+
+/**
+  * Created by srikanth
+  */
+object TopNStocksByVolumeWithName {
+  def main(args: Array[String]) {
+    val appConf = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Top n stocks by volume").
+      setMaster(appConf.getConfig(args(3)).getString("executionMode"))
+    val sc = new SparkContext(conf)
+
+    val inputPath = args(0)
+    val stockSymbolsPath = args(1)
+    val outputPath = args(2)
+
+    // We need to use HDFS FileSystem API to perform validations on input and output path
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val inputPathExists = fs.exists(new Path(inputPath))
+    val outputPathExists = fs.exists(new Path(outputPath))
+
+    if (outputPathExists)
+      fs.delete(new Path(outputPath), true)
+
+    // coalesce is used to reduce number of tasks to process data spread across
+    // many small files
+    val data = sc.textFile(inputPath).
+      coalesce(4)
+
+    val stockSymbols = sc.textFile(stockSymbolsPath).
+      map(rec => (rec.split("\t")(0), rec.split("\t")(1))).
+      collectAsMap()
+
+    val bv = sc.broadcast(stockSymbols)
+
+    val totalRecords = sc.accumulator(0, "Total number of records")
+    val noTradedRecords = sc.accumulator(0, "Number of records that are not traded")
+    val noOfTopNRecords = sc.accumulator(0, "Number of records fall under top n records")
+
+    data.
+      // Get date in YYYYMM format and stock ticker as key and volume as value
+      map(rec => {
+        totalRecords += 1
+        val a = rec.split(",")
+        if(a(6).toInt == 0)
+          noTradedRecords += 1
+        ((a(1).substring(0, 6).toInt, a(0)), a(6).toInt)
+      }).
+      // Aggregate and get volume for each stock for each month
+      reduceByKey(_ + _).
+      // Move stock ticker to value, now key is trade month
+      map(rec => (rec._1._1, (rec._2, rec._1._2))).
+      // Group by trade month
+      // Output will be (trademonth, List((stockticker, volume)))
+      groupByKey().
+      // Process the list to compute topN stocks by volume for each key
+      // This simulate dense rank functionality
+      flatMap(rec => {
+      // get topN volumes
+      val topNVolumes = rec._2.
+        toList.
+        map(_._1).
+        sortBy(-_).
+        distinct.
+        take(args(4).toInt)
+
+      // Check whether the volume of stock falls in topNVolumes
+      rec._2.
+        toList.
+        sortBy(r => -r._1).
+        filter(r => topNVolumes.contains(r._1)).
+        map(r => (rec._1, r))
+    }).
+      // sort the data by trade month
+      sortByKey().
+      // format data to be tab delimited
+      map(rec => {
+        noOfTopNRecords += 1
+        val s = if (bv.value.contains(rec._2._2)) bv.value.get(rec._2._2).get else rec._2._2
+        rec._1 + "\t" + s + "\t" + rec._2._1
+      }).
+      saveAsTextFile(outputPath)
+  }
+}
+
+--spark-scala-DailyRevenuePerDayPerDepartmentHive.scala
+
+package retail
+
+import com.typesafe.config.ConfigFactory
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.hive.HiveContext
+
+/**
+  * Created by srikanth
+  * build.sbt
+name := "doc"
+
+version := "1.0"
+
+scalaVersion := "2.10.6"
+
+libraryDependencies += "org.apache.spark" % "spark-core_2.10" % "1.6.2"
+libraryDependencies += "com.typesafe" % "config" % "1.3.1"
+libraryDependencies += "org.apache.spark" % "spark-sql_2.10" % "1.6.2"
+libraryDependencies += "org.apache.spark" % "spark-hive_2.10" % "1.6.2"
+
+  * spark-submit
+spark-submit --class retail.DailyRevenuePerDayPerDepartmentHive \
+--master yarn \
+--conf spark.ui.port=25613 \
+doc_2.10-1.0.jar /user/srikanth/DailyRevenuePerDayPerDepartmentHive prod
+  */
+
+object DailyRevenuePerDayPerDepartmentHive {
+  def main(args: Array[String]) {
+    val appConf = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Revenue by department per day").
+      setMaster(appConf.getConfig(args(1)).getString("executionMode"))
+    val sc = new SparkContext(conf)
+    val sqlContext = new HiveContext(sc)
+
+    val outputPath = args(0)
+
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val outputPathExists = fs.exists(new Path(outputPath))
+
+    if(outputPathExists)
+      fs.delete(new Path(outputPath), true)
+
+    sqlContext.sql("use doc")
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+
+    sqlContext.sql("select o.order_date, d.department_name, sum(oi.order_item_subtotal) order_revenue " +
+      "from departments d join categories c on d.department_id = c.category_department_id " +
+      "join products p on c.category_id = p.product_category_id " +
+      "join order_items oi on p.product_id = oi.order_item_product_id " +
+      "join orders o on oi.order_item_order_id = o.order_id " +
+      "where o.order_status in ('COMPLETE', 'CLOSED') " +
+      "group by o.order_date, d.department_name " +
+      "order by o.order_date, d.department_name").
+      rdd.
+      map(rec => rec.mkString("\t")).
+      saveAsTextFile(outputPath)
+  }
+}
+
+--spark-scala-DailyRevenue.scala
+
+package retail
+
+import com.typesafe.config.ConfigFactory
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.{SparkConf, SparkContext}
+
+/**
+  * Created by srikanth 
+  * problem statement:
+  * Get the total revenue per day for all completed and closed orders
+  * Filter orders for COMPLETE and CLOSED
+  */
+
+case class Orders(
+                   order_id: Int,
+                   order_date: String,
+                   order_customer_id: Int,
+                   order_status: String)
+
+case class OrderItems(
+                       order_item_id: Int,
+                       order_item_order_id: Int,
+                       order_item_product_id: Int,
+                       order_item_quantity: Int,
+                       order_item_subtotal: Float,
+                       order_item_product_price: Float)
+
+
+object DailyRevenue {
+  def main(args: Array[String]): Unit = {
+    val props = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Daily Revenue").
+      setMaster(props.getConfig(args(0)).getString("executionMode"))
+    val sc = new SparkContext(conf)
+
+    val inputPath = args(1)
+    val outputPath = args(2)
+
+    val fs: FileSystem = FileSystem.get(sc.hadoopConfiguration)
+
+    val op = new Path(outputPath)
+
+
+    if(!fs.exists(new Path(inputPath)))
+      println("Invalid input path")
+
+    if(fs.exists(op))
+      fs.delete(op, true)
+
+    val orders = sc.textFile(inputPath + "/orders").
+      map(rec => {
+        val r = rec.split(",")
+        Orders(r(0).toInt, r(1), r(2).toInt, r(3))
+      }).
+      filter(rec => rec.order_status == "COMPLETE" || rec.order_status == "CLOSED").
+      map(rec => (rec.order_id, rec.order_date))
+
+    val orderItems = sc.textFile(inputPath + "/order_items").
+      map(rec => {
+        val r = rec.split(",")
+        OrderItems(r(0).toInt, r(1).toInt, r(2).toInt, r(3).toInt, r(4).toFloat, r(5).toFloat)
+      }).
+      map(rec => (rec.order_item_order_id, rec.order_item_subtotal))
+
+    /*
+    val orderItems = sc.textFile("/Users/srikanth/Research/data/retail_db/order_items").
+      map(rec => {
+        (rec.split(",")(1).toInt, rec.split(",")(4).toFloat)
+      }).
+    */
+    /*
+    val dailyRevenueGBK = orders.join(orderItems).
+      map(rec => rec._2).
+      groupByKey().
+      map(rec => (rec._1, rec._2.sum)).
+      sortByKey()
+     */
+    
+    /*
+    // aggregateByKey example
+    val dailyRevenueABK = orders.join(orderIte
+      map(rec => rec._2).
+      aggregateByKey((0.0, 0))(
+        (seqAgg, value) => {
+          (seqAgg._1 + value, seqAgg._2 + 1)
+        },
+        (combAgg, combValue) => {
+          (combAgg._1 + combValue._1, combAgg._2 + combValue._2)
+        })
+    */
+
+
+      orders.join(orderItems).
+      map(rec => rec._2).
+      reduceByKey(_ + _).
+      sortByKey().
+      map(rec => rec.productIterator.mkString("\t")).
+      saveAsTextFile(outputPath)
+
+  }
+}
+
+-- spark-scala-TopNStocksByVolumeSQL.scala
+
+package nyse
+
+import com.typesafe.config.ConfigFactory
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
+
+/**
+  * Created by srikanth 
+  */
+
+case class StocksEOD(
+                      stockTicker: String,
+                      tradeDate: String,
+                      openPrice: Float,
+                      highPrice: Float,
+                      lowPrice: Float,
+                      closePrice: Float,
+                      volume: Int
+                    )
+
+object TopNStocksByVolumeSQL {
+  def main(args: Array[String]): Unit = {
+    val appConf = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Top N Stocks by volume").setMaster("local")
+//      setMaster(appConf.getConfig(args(2)).getString("executionMode"))
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
+
+    val inputPath = "/Users/srikanth/Research/data/nyse/*/*.txt"
+//    val outputPath = args(1)
+
+    // We need to use HDFS FileSystem API to perform validations on input and output path
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val inputPathExists = fs.exists(new Path(inputPath))
+//    val outputPathExists = fs.exists(new Path(outputPath))
+
+//    if (outputPathExists)
+//      fs.delete(new Path(outputPath), true)
+
+    // coalesce is used to reduce number of tasks to process data spread across
+    // many small files
+    import sqlContext.implicits._
+
+    val data = sc.textFile(inputPath).
+      coalesce(4).
+      map(rec => {
+        val r = rec.split(",")
+        StocksEOD(r(0), r(1), r(2).toFloat, r(3).toFloat, r(4).toFloat, r(5).toFloat, r(6).toInt)
+      }).toDF()
+    data.registerTempTable("stocks_eod")
+
+
+// This fails in spark 1.6.2 as spark sql with analytic and windowing functions are not supported
+    sqlContext.sql("select * from (" +
+      "select tradeMonth, stockTicker, monthlyVolume," +
+      " rank() over (partition by tradeMonth order by monthlyVolume desc) rnk from" +
+      " (select substr(tradeDate, 1, 6) tradeMonth, stockTicker, sum(volume) monthlyVolume" +
+      " from stocks_eod" +
+      " group by substr(tradeDate, 1, 6), stockTicker) q) q1" +
+      " where rnk <= 5" +
+      " order by tradeMonth, monthlyVolume desc").
+      collect().
+      foreach(println)
+  }
+
+}
+
+--fact.scala
+
+val a = 5
+var res = 1
+for(e <- a to 2 by -1)
+  res = res * e
+println("Factorial of " + a + " is " + res)
+
+--fibonacci.scala
+val a = 10
+var pre = 0
+var curr = 1
+println(pre)
+println(curr)
+var res = 0
+for(e <- 2 to a - 1) {
+  res = pre + curr
+  println(res)
+  pre = curr
+  curr = res
+}
+
+--fact-func.scala
+
+def fact(i: Int) = {
+  var res = 1
+  for(e <- i to 1 by -1)
+    res = res * e
+  res
+}
+
+--fact-recursive.scala
+def factr(i: Int): Int = if(i==1) 1 else i * factr(i-1)
+
+--fibo-func.scala
+
+def fibo(i: Int) = {
+  var pre = 0
+  var curr = 1
+  var res = 0
+  print(pre + "\t" + curr)
+  for(e <- 2 to i - 1) {
+    res = pre + curr
+    pre = curr
+    curr = res
+    print("\t" + res)
+  }
+}
+
+--nCr.scala
+
+def fact(i: Int) = {
+  var res = 1
+  for(e <- i to 1 by -1)
+    res = res * e
+  res
+}
+
+def nCr(n: Int, r: Int) = {
+  fact(n)/(fact(n-r) * fact(r))
+}
+
+//Nested functions
+def nCr(n: Int, r: Int) = {
+  def fact(i: Int) = {
+    var res = 1
+    for(e <- i to 1 by -1)
+      res = res * e
+    res
+  }
+
+  fact(n)/(fact(n-r) * fact(r))
+}
+
+--combination.scala
+
+/**
+  * Created by srikanth
+  */
+object combination {
+  def nCr(n: Int, r: Int) = {
+    def fact(i: Int) = {
+      var res = 1
+      for(e <- i to 1 by -1)
+        res = res * e
+      res
+    }
+
+    fact(n)/(fact(n-r) * fact(r))
+  }
+
+  def main(args: Array[String]): Unit = {
+    val n = args(0).toInt
+    val r = args(1).toInt
+    val c = nCr(n, r)
+    println("There are " + c + " combinations of " + r + " in " + n + " elements")
+  }
+
+}
+
+--Retail.scala
+
+package retail
+
+/**
+  * Created by srikanth
+  */
+class Department(
+                  departmentId: Int,
+                  departmentName: String
+                ) {
+  override def toString() = "Department(" +
+    departmentId +
+    "," +
+    departmentName +
+    ")"
+}
+
+class Category(
+                categoryId: Int,
+                categoryDepartmentId: Int,
+                categoryName: String
+              ) {
+  override def toString() = "Category(" +
+    categoryId +
+    "," +
+    categoryDepartmentId +
+    "," +
+    categoryName
+
+  ")"
+}
+
+
+class Product(
+               productId: Int,
+               productCategoryId: Int,
+               productName: String,
+               productDescription: String,
+               productPrice: Float,
+               productImage: String
+             ) {
+  override def toString() = "Product(" +
+    productId +
+    "," +
+    productCategoryId +
+    "," +
+    productName +
+    "," +
+    productDescription +
+    "," +
+    productPrice +
+    "," +
+    productImage +
+    ")"
+}
+
+class Customer(
+                customerId: Int,
+                customerFname: String,
+                customerLname: String,
+                customerEmail: String,
+                customerPassword: String,
+                customerStreet: String,
+                customerCity: String,
+                customerState: String,
+                customerZipcode: String
+              ) {
+  override def toString: String = "Customer(" +
+    customerId +
+    "," +
+    customerFname +
+    "," +
+    customerLname +
+    "," +
+    customerEmail +
+    "," +
+    customerPassword +
+    "," +
+    customerStreet +
+    "," +
+    customerCity +
+    "," +
+    customerState +
+    "," +
+    customerZipcode +
+    ")"
+}
+
+class Order(
+             orderId: Int,
+             orderDate: String,
+             orderCustomerId: Int,
+             orderStatus: String
+           ) {
+  override def toString: String = "Order(" +
+    orderId +
+    "," +
+    orderDate +
+    "," +
+    orderCustomerId +
+    "," +
+    orderStatus +
+    ")"
+}
+
+class OrderItem(
+                 orderItemId: Int,
+                 orderItemOrderId: Int,
+                 orderItemProductId: Int,
+                 orderItemQuantity: Int,
+                 orderItemSubtotal: Float,
+                 orderItemProductPrice: Float
+               ) {
+  require(
+    orderItemSubtotal == orderItemQuantity * orderItemProductPrice, "Invalid orderItemSubtotal " + orderItemSubtotal
+  )
+
+  //Additional constructor
+  def this(
+            orderItemId: Int,
+            orderItemOrderId: Int,
+            orderItemProductId: Int,
+            orderItemQuantity: Int,
+            orderItemProductPrice: Float
+          ) = {
+    //Invoking default constructor
+    this(orderItemId,
+      orderItemOrderId,
+      orderItemProductId,
+      orderItemQuantity,
+      orderItemQuantity * orderItemProductPrice,
+      orderItemProductPrice)
+  }
+
+  override def toString: String = "OrderItem(" +
+    orderItemId +
+    "," +
+    orderItemOrderId +
+    "," +
+    orderItemProductId +
+    "," +
+    orderItemQuantity +
+    "," +
+    orderItemSubtotal +
+    "," +
+    orderItemProductPrice +
+    ")"
+}
+
+object retail {
+  def main(args: Array[String]) = {
+    val oi = new OrderItem(1, 1, 1, 2, 100, 50)
+    println(oi)
+    val ordItem = new OrderItem(2, 1, 3, 3, 50)
+    println(ordItem)
+  }
+}
+
+--RetailCase.scala
+
+package retail
+
+/**
+  * Created by srikanth 
+  */
+case class Department(
+                       departmentId: Int,
+                       departmentName: String
+                     )
+
+case class Category(
+                     categoryId: Int,
+                     categoryDepartmentId: Int,
+                     categoryName: String
+                   )
+
+
+case class Product(
+                    productId: Int,
+                    productCategoryId: Int,
+                    productName: String,
+                    productDescription: String,
+                    productPrice: Float,
+                    productImage: String
+                  )
+
+case class Customer(
+                     customerId: Int,
+                     customerFname: String,
+                     customerLname: String,
+                     customerEmail: String,
+                     customerPassword: String,
+                     customerStreet: String,
+                     customerCity: String,
+                     customerState: String,
+                     customerZipcode: String
+                   )
+
+case class Order(
+                  orderId: Int,
+                  orderDate: String,
+                  orderCustomerId: Int,
+                  orderStatus: String
+                )
+
+case class OrderItem(
+                      orderItemId: Int,
+                      orderItemOrderId: Int,
+                      orderItemProductId: Int,
+                      orderItemQuantity: Int,
+                      orderItemSubtotal: Float,
+                      orderItemProductPrice: Float
+                    ) {
+  require(
+    orderItemSubtotal == orderItemQuantity * orderItemProductPrice, "Invalid orderItemSubtotal " + orderItemSubtotal
+  )
+
+  //Additional constructor
+  def this(
+            orderItemId: Int,
+            orderItemOrderId: Int,
+            orderItemProductId: Int,
+            orderItemQuantity: Int,
+            orderItemProductPrice: Float
+          ) = {
+    //Invoking default constructor
+    this(orderItemId,
+      orderItemOrderId,
+      orderItemProductId,
+      orderItemQuantity,
+      orderItemQuantity * orderItemProductPrice,
+      orderItemProductPrice)
+  }
+}
+
+object retail {
+  def main(args: Array[String]) = {
+    val oi = new OrderItem(1, 1, 1, 2, 100, 50)
+    println(oi)
+    val ordItem = new OrderItem(2, 1, 3, 3, 50)
+    println(ordItem)
+  }
+}
+
+--func-higher-order.scala
+
+//recursive
+def sum(f: Int => Int, a: Int, b: Int): Int = {
+    if(a > b) 0 else f(a) + sum(f, a + 1, b)
+}
+
+//non recursive
+def sum(f: Int => Int, a: Int, b: Int): Int = {
+    var res = 0
+    for(ele <- a to b by 1)
+        res = res + f(ele)
+    res
+}
+
+def id(i: Int) = i
+def sqr(i: Int) = math.pow(i, 2).toInt
+def cube(i: Int) = math.pow(i, 3).toInt
+
+sum(id, 1, 10)
+sum(sqr, 1, 5)
+sum(cube, 1, 4)
+
+--func-anonymous.scala
+
+//recursive
+def sum(f: Int => Int, a: Int, b: Int): Int = {
+    if(a > b) 0 else f(a) + sum(f, a + 1, b)
+}
+
+//non recursive
+def sum(f: Int => Int, a: Int, b: Int): Int = {
+    var res = 0
+    for(ele <- a to b by 1)
+        res = res + f(ele)
+    res
+}
+
+//anonymous functions defined as variables
+val i = (i: Int) => i
+val s = (i: Int) => math.pow(i, 2).toInt
+val c = (i: Int) => math.pow(i, 3).toInt
+
+sum(i, 1, 100)
+sum(s, 1, 10)
+sum(c, 1, 3)
+
+//anonymous functions directly passed.
+//This is very important and quite often used
+sum((i: Int) => i, 1, 100)
+sum((s: Int) => s * s, 1, 10)
+sum((c: Int) => math.pow(c, 3).toInt, 1, 5)
+
+--list-operations-map-reduce.scala
+
+os.map(x => x.orderDate.replace("-", "").toInt).foreach(println)
+os.filter(x => x.orderStatus == "COMPLETE")
+(1 to 100).filter(_ % 2 == 0).reduce((a, b) => a + b)
+
+--list-operations-sort.scala
+
+os.sortBy(x => x.orderCustomerId)
+os.sortWith((a, b) => {
+  if(a.orderCustomerId > b.orderCustomerId)
+    false
+  else if(a.orderCustomerId < b.orderCustomerId)
+    true
+  else {
+    if(a.orderId > b.orderId)
+      false
+    else
+      true
+  	}
+  }
+).foreach(println)
+
+--list-operations-grouping.scala
+
+os.groupBy(x => x.orderStatus)
+
+//To get count by order status
+os.groupBy(x => x.orderStatus).map(x => (x._1, x._2.size)).foreach(println)
+
+--list-operations-create.scala
+case class Order(
+                  orderId: Int,
+                  orderDate: String,
+                  orderCustomerId: Int,
+                  orderStatus: String
+                )
+
+val os = List(
+  Order(1, "2017-01-01", 100, "COMPLETE"), 
+  Order(2, "2017-01-01", 20, "CLOSED"),
+  Order(3, "2017-01-01", 301, "PENDING"),
+  Order(4, "2017-01-01", 202, "CLOSED"),
+  Order(5, "2017-01-01", 3013, "COMPLETE"),
+  Order(6, "2017-01-01", 203, "PENDING"),
+  Order(7, "2017-01-01", 3014, "COMPLETE"),
+  Order(8, "2017-01-01", 20, "NEW"),
+  Order(9, "2017-01-01", 301, "PENDING"),
+  Order(10, "2017-01-01", 2, "CLOSED"),
+  Order(11, "2017-01-01", 1, "COMPLETE"),
+  Order(12, "2017-01-01", 3, "NEW"),
+  Order(13, "2017-01-01", 301, "COMPLETE")
+)
+
+--fraction.scala
+
+/**
+  * Created by srikanth 
+  */
+class Fraction(val n: Int, val d: Int) {
+  override def toString = n + "/" + d
+  def result = n/d.toDouble
+  def +(f: Fraction) = {
+    new Fraction(((n*f.d) + (f.n*d)), (d * f.d))
+  }
+}
+
+object Fraction {
+  def main(args: Array[String]): Unit = {
+    val f = new Fraction(2, 4)
+    println(f)
+    println(f.result)
+    val s = new Fraction(5, 3)
+    println(s)
+    println(s.result)
+    val r = f + s
+    println(r)
+    println(r.result)
+  }
+}
+
+--set-additions-removals-operations.scala
+
+//os is of type immutable set, 
+//hence elements cannot be added to set
+//+=, ++=, -=, --= will not work
+val os = Set(
+  Order(1, "2017-01-01", 100, "COMPLETE"), 
+  Order(2, "2017-01-01", 20, "CLOSED")
+)
+//Creating new set by adding element
+os + Order(3, "2017-01-01", 301, "PENDING")
+
+//We can add elements using +=, ++=, -=, --=
+val os = collection.mutable.Set(
+  Order(1, "2017-01-01", 100, "COMPLETE"), 
+  Order(2, "2017-01-01", 20, "CLOSED")
+)
+//+=, ++=, -=, --= will work to manipulate mutable sets
+os += Order(3, "2017-01-01", 301, "PENDING")
+//But below statement will not work 
+// as we are trying to assign to immutable os
+os = os + Order(4, "2017-01-01", 301, "PENDING")
+
+--set-set-operations.scala
+
+
+val os1 = Set(
+  Order(1, "2017-01-01", 100, "COMPLETE"), 
+  Order(2, "2017-01-01", 20, "CLOSED")
+)
+
+val os2 = Set(
+  Order(2, "2017-01-01", 20, "CLOSED"),
+  Order(3, "2017-01-01", 301, "PENDING"),
+  Order(4, "2017-01-01", 202, "CLOSED"),
+  Order(5, "2017-01-01", 3013, "COMPLETE")
+)
+
+os1.union(os2)
+os1 | os2
+
+os1.intersect(os2)
+os1 & os2
+
+os1.diff(os2)
+os1 &~ os2
+os2.diff(os1)
+os2 &~ os1
+
+--order.scala
+
+case class Order(
+                  orderId: Int,
+                  orderDate: String,
+                  orderCustomerId: Int,
+                  orderStatus: String
+                )
+
+--map-additions-removals-operations.scala
+
+val m = Map(
+  (1, Order(1, "2017-01-01", 100, "COMPLETE")),
+  (2, Order(2, "2017-01-01", 20, "CLOSED"))
+)
+
+//as m is immutable we cannot use +=, ++=, -= and --=
+m + ((3, Order(3, "2017-01-01", 301, "PENDING")))
+m + (3 -> Order(3, "2017-01-01", 301, "PENDING"))
+
+//let us define m as mutable Map
+val m = collection.mutable.Map(
+  (1, Order(1, "2017-01-01", 100, "COMPLETE")),
+  (2, Order(2, "2017-01-01", 20, "CLOSED"))
+)
+
+//Now we can manipulate map by using +=, ++=, -=, --=
+m += ((3, Order(3, "2017-01-01", 301, "PENDING")))
+
+--map-opertions.scala
+val os = Map(
+  (1, Order(1, "2017-01-01", 100, "COMPLETE")),
+  (2, Order(2, "2017-01-01", 20, "CLOSED")),
+  (3, Order(3, "2017-01-01", 301, "PENDING")),
+  (4, Order(4, "2017-01-01", 202, "CLOSED")),
+  (5, Order(5, "2017-01-01", 3013, "COMPLETE"))
+)
+
+m(1)
+m.get(1).get
+
+m.getOrElse(1, "Not Available")
+m.getOrElse(10, "Not Available")
+m.keys
+m.values
+
+m.filterKeys(a => a >= 2)
+m.mapValues(a => (a.orderStatus, 1)).map(_._2).toList
+
+--tuple-operations.scala
+
+val t = List((1, Set(
+  Order(1, "2017-01-01", 100, "COMPLETE"), 
+  Order(2, "2017-01-01", 20, "CLOSED"),
+  Order(3, "2017-01-01", 301, "PENDING"),
+  Order(4, "2017-01-01", 202, "CLOSED"),
+  Order(5, "2017-01-01", 3013, "COMPLETE"),
+  Order(6, "2017-01-01", 203, "PENDING"),
+  Order(7, "2017-01-01", 3014, "COMPLETE"),
+  Order(8, "2017-01-01", 20, "NEW"),
+  Order(9, "2017-01-01", 301, "PENDING"),
+  Order(10, "2017-01-01", 2, "CLOSED"),
+  Order(11, "2017-01-01", 1, "COMPLETE"),
+  Order(12, "2017-01-01", 3, "NEW"),
+  Order(13, "2017-01-01", 301, "COMPLETE")
+)),
+(2, Set(
+  Order(1, "2017-01-01", 100, "COMPLETE"), 
+  Order(2, "2017-01-01", 20, "CLOSED"),
+  Order(3, "2017-01-01", 301, "PENDING"),
+  Order(4, "2017-01-01", 202, "CLOSED"),
+  Order(5, "2017-01-01", 3013, "COMPLETE"),
+  Order(6, "2017-01-01", 203, "PENDING"),
+  Order(7, "2017-01-01", 3014, "COMPLETE"),
+  Order(8, "2017-01-01", 20, "NEW"),
+  Order(9, "2017-01-01", 301, "PENDING"),
+  Order(10, "2017-01-01", 2, "CLOSED"),
+  Order(11, "2017-01-01", 1, "COMPLETE"),
+  Order(12, "2017-01-01", 3, "NEW"),
+  Order(13, "2017-01-01", 301, "COMPLETE")
+)))
+
+// get min of orderId
+t.map(a => (a._1, a._2.map(o => o.orderId).min))
+
+// get order details with minimum orderId
+t.map(a => (a._1, a._2.minBy(o => o.orderId)))
+
+// get size of each set in the collection of key and value.
+// Value is set in this case
+t.map(a => (a._1, a._2.size))
+
+// get completed orders from each of the set in the list of tuples
+// Each tuple is nothing but key and value, where value is of type set
+t.map(a => (a._1, a._2.filter(o => o.orderStatus == "COMPLETE"))).foreach(println)
+
+// We can flatten the list by using flatMap
+t.flatMap(rec => rec._2.filter(order => order.orderStatus == "COMPLETE")).foreach(println)
+
+--jdbcdemo-base-build.sbt
+name := "jdbcdemo"
+version := "1.0"
+scalaVersion := "2.11.8"
+--scala-helloworld-parameterize.scala
+object hw {
+  def main(args: Array[String]) {
+    println("Hello " + args(0))
+  }
+}
+
+--spark-scala-rdd-parallelize.scala
+
+val data = 1 to 1000000
+val dataRDD = sc.parallelize(data)
+
+dataRDD.reduce((acc, value) => acc + value)
+
+--spark-scala-conf-and-context.scala
+
+import org.apache.spark.{SparkConf,SparkContext}
+
+val conf = new SparkConf().setAppName("Spark Demo").setMaster("local")
+val sc = new SparkContext(conf)
+
+--spark-scala-actions-preview-data.scala
+val path = "/public/retail_db" or val path = "/Users/srikanth/Research/data/retail_db"
+
+val rdd = sc.textFile(path + "/orders")
+rdd.first
+rdd.take(10)
+rdd.collect
+rdd.take(10).foreach(println)
+rdd.take(10).foreach(k => println(k.split(",")(0) + "\t" + k.split(",")(1)))
+
+--spark-scala-actions-transformations.scala
+val path = "/public/retail_db" or val path = "/Users/srikanth/Research/data/retail_db"
+val rdd = sc.textFile(path + "/orders")
+rdd.reduce((agg, ele) => {
+  if(agg.split(",")(2).toInt < ele.split(",")(2).toInt) agg else ele
+  })
+rdd.top(2)
+rdd.takeOrdered(5)(Ordering[Int].reverse.on(x => x.split(",")(2).toInt)).foreach(println)
+
+--spark-scala-transformations-mapping.scala
+val orders = sc.textFile("/public/retail_db/orders") // On the lab accessing HDFS
+val orders = sc.textFile("/Users/srikanth/Research/data/retail_db/orders") // Accessing locally on the PC
+// Change to valid path as per your preference. Make sure the directory orders exist in the path (locally or on HDFS)
+orders.take(10).foreach(println)
+val completedOrders = orders.filter(rec => rec.split(",")(3) == "COMPLETE")
+val pendingOrders = orders.
+  filter(order => {
+    val o = order.split(",")
+    (o(3).contains("PENDING") || o(3) == "PROCESSING") && o(1).contains("2013-08")
+  })
+
+val orderDates = completedOrders.map(rec => (rec.split(",")(0).toInt, rec.split(",")(1)))
+
+val lines = Array("Hello World", 
+  "In this case we are trying to understand", 
+  "the purpose of flatMap", 
+  "flatMap is a function which will apply transformation", 
+  "if the transformation results in array, it will flatten out array as individual records", 
+  "let us also understand difference between map and flatMap", 
+  "in case of map, it take one record and return one record after applying transformation", 
+  "even if the transformation result in an array", 
+  "where as in case of flatMap, it might return one or more records", 
+  "if the transformation of 1 record result an array of 1000 records, ", 
+  "then flatMap returns 1000 records")
+val linesRDD = sc.parallelize(lines)
+val words = linesRDD.flatMap(rec => rec.split(" "))
+words.collect().foreach(println)
+
+--spark-scala-set-operations.scala
+val path = "/public/retail_db" or val path = "/Users/srikanth/Research/data/retail_db"
+
+val orders201312 = sc.textFile(path + "/orders").
+  filter(order => order.split(",")(1).contains("2013-12")).
+  map(order => (order.split(",")(0).toInt, order.split(",")(1)))
+
+val orderItems = sc.textFile(path + "/order_items").
+  map(rec => (rec.split(",")(1).toInt, rec.split(",")(2).toInt))
+
+val distinctProducts201312 = orders201312.
+  join(orderItems).
+  map(order => order._2._2).
+  distinct
+
+val orders201401 = sc.textFile(path + "/orders").
+  filter(order => order.split(",")(1).contains("2014-01")).
+  map(order => (order.split(",")(0).toInt, order.split(",")(1)))
+
+val products201312 = orders201312.
+  join(orderItems).
+  map(order => order._2._2)
+
+val products201401 = orders201401.
+  join(orderItems).
+  map(order => order._2._2)
+
+products201312.union(products201401).count
+products201312.union(products201401).distinct.count
+
+products201312.intersection(products201401).count
+
+--spark-scala-join-operations.scala
+
+val path = "/public/retail_db" or val path = "/Users/srikanth/Research/data/retail_db"
+
+val orders = sc.textFile(path + "/orders").
+  map(rec => (rec.split(",")(0).toInt, rec))
+
+val orderItems = sc.textFile(path + "/order_items").
+  map(rec => (rec.split(",")(1).toInt, rec))
+
+val ordersJoin = orders.join(orderItems)
+ordersJoin.take(10).foreach(println)
+
+val ordersLeftOuter = orders.leftOuterJoin(orderItems)
+ordersLeftOuter.filter(rec => rec._2._2 == None).take(10).foreach(println)
+ordersLeftOuter.
+  filter(rec => rec._2._2 == None).
+  map(rec => rec._2._1).
+  take(10).
+  foreach(println)
+
+val ordersCogroup = orders.cogroup(orderItems)
+ordersCogroup.take(10).foreach(println)
+
+val a = sc.parallelize(List(1, 2, 3, 4))
+val b = sc.parallelize(List("Hello", "World"))
+a.cartesian(b).foreach(println)
+
+--spark-scala-aggregations.scala
+
+val path = "/Users/srikanth/Research/data/retail_db" or val path = "/public/retail_db"
+
+val orderItems = sc.textFile(path + "/order_items").
+  map(orderItem => (orderItem.split(",")(1).toInt, orderItem.split(",")(4).toFloat))
+
+// Compute revenue for each order
+orderItems.
+  reduceByKey((total, orderItemSubtotal) => total + orderItemSubtotal).
+  take(100).
+  foreach(println)
+
+// Compute revenue and number of items for each order using aggregateByKey
+orderItems.
+  aggregateByKey((0.0, 0))(
+    (iTotal, oisubtotal) => (iTotal._1 + oisubtotal, iTotal._2 + 1),
+    (fTotal, iTotal) => (fTotal._1 + iTotal._1, fTotal._2 + iTotal._2)
+  ).
+  take(100).
+  foreach(println)
+
+// Compute revenue and number of items for each order using reduceByKey
+sc.textFile(path + "/order_items").
+  map(orderItem => (orderItem.split(",")(1).toInt, (orderItem.split(",")(4).toFloat, 1))).
+  reduceByKey((total, element) => (total._1 + element._1, total._2 + element._2)).
+  take(100).
+  foreach(println)
+  
+--spark-scala-bykey-sorting-and-ranking.scala
+
+val path = "/Users/srikanth/Research/data/retail_db" or val path = "/public/retail_db"
+
+val orders = sc.textFile(path + "/orders")
+
+// orders sorted by status
+orders.
+  map(order => {
+    val o = order.split(",")
+    (o(3), order)
+  }).
+  sortByKey().
+  map(_._2).
+  take(100).
+  foreach(println)
+
+// orders sorted by status and date in descending order
+orders.
+  map(order => {
+    val o = order.split(",")
+    ((o(3), o(1)), order)
+  }).
+  sortByKey(false).
+  map(_._2).
+  take(100).
+  foreach(println)
+
+// let us get top 5 products in each category from products
+val products = sc.textFile(path + "/products")
+val productsGroupByCategory = products.
+  filter(product => product.split(",")(4) != "").
+  map(product => {
+    val p = product.split(",")
+    (p(1).toInt, product)
+  }).
+groupByKey
+
+productsGroupByCategory.
+  sortByKey().
+  flatMap(rec => {
+    rec._2.toList.sortBy(r => -r.split(",")(4).toFloat).take(5)
+  }).
+  take(100).
+  foreach(println)
+
+--scala-reading-from-files.scala
+
+import scala.io.Source
+
+val fileName = "/Users/srikanth/Research/data/elections/ls2014.tsv"
+val results = Source.fromFile(fileName).getLines
+// results is now a collection of type Iterator[String]
+
+--scala-notabystate.scala
+import scala.io.Source
+
+val fileName = "/Users/srikanth/Research/data/elections/ls2014.tsv"
+val results = Source.fromFile(fileName).getLines
+
+val notas = results.filter(rec => rec.split("\t")(2) == "None of the Above")
+// val notas = results.partition(rec => rec.split("\t")(2) == "None of the Above")._1
+val notaByState = notas.
+  map(rec => (rec.split("\t")(0), rec.split("\t")(10).toInt)).
+  toList.
+  groupBy(rec => rec._1).
+  map(rec => (rec._1, rec._2.map(_._2).reduce((a, b) => a + b))).
+  toList.
+  sortBy(rec => -rec._2)
+
+notaByState.foreach(rec => println(rec._1 + "\t" + rec._2))
+
+--spark-scala-minpricedproductbycategory.scala
+
+val path = "/public/retail_db"
+val products = sc.textFile(path + "/products")
+
+val minPricedProductsByCategory = products.
+  filter(product => product.split(",")(4) != "").
+  map(product => {
+    val p = product.split(",")
+    (p(1).toInt, product)
+  }).
+  reduceByKey((agg, product) => {
+    if(agg.split(",")(4).toFloat < product.split(",")(4).toFloat)
+      agg
+    else
+      product
+  }).
+  map(rec => rec._2)
+minPricedProductsByCategory.collect.foreach(println)
+
+--spark-scala-groupByKey-denserank.scala
+
+val path = "/Users/srikanth/Research/data/retail_db" or val path = "/public/retail_db"
+
+val products = sc.textFile(path + "/products")
+
+val productsGroupByCategory = products.
+  filter(product => product.split(",")(4) != "").
+  map(product => {
+    val p = product.split(",")
+    (p(1).toInt, product)
+  }).
+groupByKey
+
+//Exploring scala APIs to get top 5 priced products
+val i = productsGroupByCategory.first._2
+val l = i.toList
+
+val topNPrices = l.map(rec => rec.split(",")(4).toFloat).
+  sortBy(k => -k).
+  distinct.
+  take(5)
+l.sortBy(rec => -rec.split(",")(4).toFloat).
+  filter(rec => topNPrices.contains(rec.split(",")(4).toFloat)).
+  foreach(println)
+
+//Getting top 5 priced products using Spark and Scala
+productsGroupByCategory.flatMap(rec => {
+  val topNPrices = rec._2.toList.
+    map(rec => rec.split(",")(4).toFloat).
+    sortBy(k => -k).
+    distinct.
+    take(5)
+  rec._2.toList.
+    sortBy(rec => -rec.split(",")(4).toFloat).
+    filter(rec => topNPrices.contains(rec.split(",")(4).toFloat))
+}).
+collect.
+foreach(println)
+
+--spark-scala-wordcount-ide.scala
+
+package wordcount
+
+import org.apache.spark.{SparkConf,SparkContext}
+import org.apache.hadoop.fs._
+
+/**
+  * Created by srikanth 
+  */
+object WordCount {
+  def main(args: Array[String]) = {
+    val conf = new SparkConf().setAppName("Word Count").setMaster("local")
+    val sc = new SparkContext(conf)
+
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+
+    val inputPath = args(0)
+    val outputPath = args(1)
+
+    if(!fs.exists(new Path(inputPath))) {
+      println("Input path does not exist")
+    } else {
+
+      if (fs.exists(new Path(outputPath)))
+        fs.delete(new Path(outputPath), true)
+
+      sc.textFile(inputPath).
+        flatMap(_.split(" ")).
+        map((_, 1)).
+        reduceByKey(_ + _).
+        map(rec => rec._1 + "\t" + rec._2).
+        saveAsTextFile(outputPath)
+    }
+  }
+}
+
+--spark-scala-build.sbt
+name := "sparkdemo"
+
+version := "1.0"
+
+scalaVersion := "2.10.5"
+
+libraryDependencies += "org.apache.spark" % "spark-core_2.10" % "1.6.3"
+libraryDependencies += "com.typesafe" % "config" % "1.3.0"
+
+--spark-scala-wordcount-mapPartitions.scala
+
+val path = "/Users/srikanth/Research/data/wordcount.txt" or val path = "/public/randomtextwriter/part-m-00000"
+
+sc.textFile(path).
+  mapPartitions(lines => {
+    // Using Scala APIs to process each partition
+    lines.flatMap(_.split(" ")).map((_, 1))
+  }).
+  reduceByKey((total, agg) => total + agg).
+  take(100).
+  foreach(println)
+  
+--spark-submit-wordcount-local-standalone.sh
+
+spark-submit --class wordcount.WordCount \
+  target/scala-2.10/sparkdemo_2.10-1.0.jar \
+  uat \
+  /Users/srikanth/Research/data/wordcount.txt \
+  /Users/srikanth/Research/data/wordcount
+
+--spark-submit-wordcount-yarn.sh
+
+spark-submit --class wordcount.WordCount \
+  --master yarn \
+  --conf spark.ui.port=54312 \
+  sparkdemo_2.10-1.0.jar \
+  prod \
+  /public/randomtextwriter/part-m-00000 \
+  /user/srikanth/wordcount
+
+--spark-submit-wordcount-yarn-custom-capacity.sh
+
+spark-submit --class wordcount.WordCount \
+  --num-executors 10 \
+  --executor-memory 3584M \
+  --executor-cores 4 \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  sparkdemo_2.10-1.0.jar \
+  prod /public/randomtextwriter /user/srikanth/wordcount
+
+--spark-scala-cardcountbysuit.scala
+// Make sure you do not have directory used for output path
+// hadoop fs -rm -R /user/srikanth/cardcountbysuit
+val inputPath = "/public/cards/largedeck.txt"
+val outputPath = "/user/srikanth/cardcountbysuit"
+
+sc.textFile(inputPath).
+  map(card => (card.split("\\|")(1), 1)).
+  reduceByKey((total, card) => total + card).
+  saveAsTextFile(outputPath)
+
+--spark-scala-wordcount-coalesce.scala
+// Make sure you do not have directory used for output path
+val path = "/Users/srikanth/Research/data/wordcount.txt" or val path = "/public/randomtextwriter/part-m-00000"
+
+sc.textFile(path).
+  coalesce(5). // with out coalesce it will try to use 9 tasks in first stage
+  flatMap(_.split(" ")).
+  map((_, 1)).
+  reduceByKey((total, agg) => total + agg).
+  coalesce(2). // second stage will use only 2 tasks 
+  take(100).
+  foreach(println)
+
+--spark-scala-cardcountbysuit-repartition.scala
+
+// Make sure you do not have directory used for output path
+// hadoop fs -rm -R /user/srikanth/cardcountbysuit
+val inputPath = "/public/cards/largedeck.txt"
+val outputPath = "/user/srikanth/cardcountbysuit"
+
+sc.textFile(inputPath).
+  repartition(12).
+  map(card => (card.split("\\|")(1), 1)).
+  reduceByKey((total, card) => total + card, 2).
+  saveAsTextFile(outputPath)
+  
+--spark-scala-cardcountbysuit-numtasks.scala
+
+// Make sure you do not have directory used for output path
+// hadoop fs -rm -R /user/srikanth/cardcountbysuit
+val inputPath = "/public/cards/largedeck.txt"
+val outputPath = "/user/srikanth/cardcountbysuit"
+
+sc.textFile(inputPath).
+  map(card => (card.split("\\|")(1), 1)).
+  reduceByKey((total, card) => total + card, 1). //Only 1 file will be created and 1 task will be used in second stage.
+  saveAsTextFile(outputPath)
+  
+--spark-scala-wordcount-numtasks.scala
+
+val inputPath = "/public/randomtextwriter/part-m-0000*"
+val outputPath = "/user/srikanth/wordcount"
+
+sc.textFile(inputPath).
+  flatMap(_.split(" ")).
+  map((_, 1)).
+  reduceByKey((total, agg) => total + agg, 10). //Ideal number of tasks could be 4
+  saveAsTextFile(outputPath)
+  
+--youthspark-bootstrap-index.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+
+    <title>Document</title>
+    <!--<style>
+        label {
+            padding: 12px 20px;
+            width: 10%;
+            margin: 8px 0;
+            display: inline-block;
+            color: red;
+        }
+        input[type=text] {
+            padding: 12px 20px;
+            width: 20%;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+     </style>-->
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Youth Spark by Girls In Tech</h1>
+        <form class="form-horizontal">
+
+            <div class="form-group">
+                <label class="control-label col-sm-2"><b>Name</b></label>
+                <div class="col-sm-10">
+                    <input type="text" placeholder="Enter Name" name="name" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="control-label col-sm-2"><b>Contact Number</b></label>
+                <div class="col-sm-10">
+                    <input type="text" placeholder="Enter Contact Number" name="contact" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="control-label col-sm-2" for="email"><b>Email</b></label>
+                <div class="col-sm-10">
+                    <input type="text" placeholder="Enter Email Id" name="email" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="control-label col-sm-2"><b>Address</b></label>
+                <div class="col-sm-10">
+                    <input type="text" placeholder="Enter Address" name="address" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                    <button type="button" class="cancelbtn">Cancel</button>
+                    <button type="submit" class="signupbtn">Sign Up</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
+
+--youthspark-basic-index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Welcome to Youth Spark by Girls In Tech</h1>
+    <label><b>Name</b></label>
+    <input type="text" placeholder="Enter Name" name="name" required>
+    <br>
+
+    <label><b>Contact Number</b></label>
+    <input type="text" placeholder="Enter Contact Number" name="contact" required>
+    <br>
+
+    <label><b>Email</b></label>
+    <input type="text" placeholder="Enter Email Id" name="email" required>
+    <br>
+
+    <label><b>Address</b></label>
+    <input type="text" placeholder="Enter Address" name="address" required>
+    <br>
+
+    <button type="button" class="cancelbtn">Cancel</button>
+    <button type="submit" class="signupbtn">Sign Up</button>
+    
+</body>
+</html>
+
+--youthspark-css-index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <style>
+        label {
+            padding: 12px 20px;
+            width: 10%;
+            margin: 8px 0;
+            display: inline-block;
+            color: red;
+        }
+        input[type=text] {
+            padding: 12px 20px;
+            width: 20%;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to Youth Spark by Girls In Tech</h1>
+    <label><b>Name</b></label>
+    <input type="text" placeholder="Enter Name" name="name" required>
+    <br>
+
+    <label><b>Contact Number</b></label>
+    <input type="text" placeholder="Enter Contact Number" name="contact" required>
+    <br>
+
+    <label><b>Email</b></label>
+    <input type="text" placeholder="Enter Email Id" name="email" required>
+    <br>
+
+    <label><b>Address</b></label>
+    <input type="text" placeholder="Enter Address" name="address" required>
+    <br>
+
+    <button type="button" class="cancelbtn">Cancel</button>
+    <button type="submit" class="signupbtn">Sign Up</button>
+    
+</body>
+</html>
+
+--spark-scala-application.properties
+
+dev.executionMode = local
+uat.executionMode = spark://Apples-MacBook-Pro.local:7077
+prod.executionMode = yarn-client
+
+--spark-scala-RevenuePerProductForMonth.scala
+
+package retail
+
+import com.typesafe.config.ConfigFactory
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.io.Source
+
+/**
+  * Created by srikanth 
+  */
+object RevenuePerProductForMonth {
+  def main(args: Array[String]): Unit = {
+    val inputPath = args(1)
+    val outputPath = args(2)
+    val month = args(4)
+
+    val props = ConfigFactory.load()
+    val envProps = props.getConfig(args(0))
+    val conf = new SparkConf().
+      setAppName("Revenue Per Product for " + month).
+      setMaster(envProps.getString("executionMode"))
+    val sc = new SparkContext(conf)
+
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+
+    if (!fs.exists(new Path(inputPath))) {
+      println("Input path does not exist")
+    } else {
+      if (fs.exists(new Path(outputPath)))
+        fs.delete(new Path(outputPath), true)
+
+      // Filter for orders which fall in the month passed as argument
+      val orders = inputPath + "/orders"
+      val ordersFiltered = sc.textFile(orders).
+        filter(order => order.split(",")(1).contains(month)).
+        map(order => (order.split(",")(0).toInt, 1))
+
+      // Join filtered orders and order_items to get order_item details for a given month
+      // Get revenue for each product_id
+      val orderItems = inputPath + "/order_items"
+      val revenueByProductId = sc.textFile(orderItems).
+        map(orderItem => {
+          val oi = orderItem.split(",")
+          (oi(1).toInt, (oi(2).toInt, oi(4).toFloat))
+        }).
+        join(ordersFiltered).
+        map(rec => rec._2._1).
+        reduceByKey(_ + _)
+
+      // We need to read products from local file system
+      val localPath = args(3)
+      val products = Source.
+        fromFile(localPath  + "/products/part-00000").
+        getLines()
+
+      // Convert into RDD and extract product_id and product_name
+      // Join it with aggregated order_items (product_id, revenue)
+      // Get product_name and revenue for each product
+      sc.parallelize(products.toList).
+        map(product => (product.split(",")(0).toInt, product.split(",")(2))).
+        join(revenueByProductId).
+        map(rec => rec._2.productIterator.mkString("\t")).
+        saveAsTextFile(outputPath)
+    }
+  }
+
+}
+
+--spark-scala-RevenuePerProductForMonth-accumulators.scala
+package retail
+
+import com.typesafe.config.ConfigFactory
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.io.Source
+
+/**
+  * Created by srikanth 
+  */
+object RevenuePerProductForMonth {
+  def main(args: Array[String]): Unit = {
+    val inputPath = args(1)
+    val outputPath = args(2)
+    val month = args(4)
+
+    val props = ConfigFactory.load()
+    val envProps = props.getConfig(args(0))
+    val conf = new SparkConf().
+      setAppName("Revenue Per Product for " + month).
+      setMaster(envProps.getString("executionMode"))
+    val sc = new SparkContext(conf)
+
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+
+    if (!fs.exists(new Path(inputPath))) {
+      println("Input path does not exist")
+    } else {
+      if (fs.exists(new Path(outputPath)))
+        fs.delete(new Path(outputPath), true)
+
+      // Filter for orders which fall in the month passed as argument
+      val ordersCount = sc.accumulator(0, "Orders for month " + month)
+      val orders = inputPath + "/orders"
+      val ordersFiltered = sc.textFile(orders).
+        filter(order => order.split(",")(1).contains(month)).
+        map(order => {
+          ordersCount += 1
+          (order.split(",")(0).toInt, 1)
+        })
+
+      // Join filtered orders and order_items to get order_item details for a given month
+      // Get revenue for each product_id
+      val orderItemsCount = sc.accumulator(0, "Order Items for month " + month)
+      val orderItems = inputPath + "/order_items"
+      val revenueByProductId = sc.textFile(orderItems).
+        map(orderItem => {
+          val oi = orderItem.split(",")
+          (oi(1).toInt, (oi(2).toInt, oi(4).toFloat))
+        }).
+        join(ordersFiltered).
+        map(rec => {
+          orderItemsCount += 1
+          rec._2._1
+        }).
+        reduceByKey(_ + _)
+
+      // We need to read products from local file system
+      val localPath = args(3)
+      val products = Source.
+        fromFile(localPath  + "/products/part-00000").
+        getLines()
+
+      // Convert into RDD and extract product_id and product_name
+      // Join it with aggregated order_items (product_id, revenue)
+      // Get product_name and revenue for each product
+      sc.parallelize(products.toList).
+        map(product => (product.split(",")(0).toInt, product.split(",")(2))).
+        join(revenueByProductId).
+        map(rec => rec._2.productIterator.mkString("\t")).
+        saveAsTextFile(outputPath)
+    }
+  }
+}
+
+--spark-submit-revenueperproductformonth.sh
+spark-submit --class retail.RevenuePerProductForMonth \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  sparkdemo_2.10-1.0.jar \
+  prod /public/retail_db /user/srikanth/revenueperproductformonth \
+  /data/retail_db 2013-12
+  
+--spark-scala-RevenuePerProductForMonth-broadcast.scala
+package retail
+
+import com.typesafe.config.ConfigFactory
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.io.Source
+
+/**
+  * Created by srikanth 
+  */
+object RevenuePerProductForMonthBroadcast {
+  def main(args: Array[String]): Unit = {
+    val inputPath = args(1)
+    val outputPath = args(2)
+    val month = args(4)
+
+    val props = ConfigFactory.load()
+    val envProps = props.getConfig(args(0))
+    val conf = new SparkConf().
+      setAppName("Revenue Per Product for " + month).
+      setMaster(envProps.getString("executionMode"))
+    val sc = new SparkContext(conf)
+
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+
+    if (!fs.exists(new Path(inputPath))) {
+      println("Input path does not exist")
+    } else {
+      if (fs.exists(new Path(outputPath)))
+        fs.delete(new Path(outputPath), true)
+
+      // Filter for orders which fall in the month passed as argument
+      val ordersCount = sc.accumulator(0, "Orders for month " + month)
+      val orders = inputPath + "/orders"
+      val ordersFiltered = sc.textFile(orders).
+        filter(order => order.split(",")(1).contains(month)).
+        map(order => {
+          ordersCount += 1
+          (order.split(",")(0).toInt, 1)
+        })
+
+      // Join filtered orders and order_items to get order_item details for a given month
+      // Get revenue for each product_id
+      val orderItemsCount = sc.accumulator(0, "Order Items for month " + month)
+      val orderItems = inputPath + "/order_items"
+      val revenueByProductId = sc.textFile(orderItems).
+        map(orderItem => {
+          val oi = orderItem.split(",")
+          (oi(1).toInt, (oi(2).toInt, oi(4).toFloat))
+        }).
+        join(ordersFiltered).
+        map(rec => {
+          orderItemsCount += 1
+          rec._2._1
+        }).
+        reduceByKey(_ + _)
+
+      // We need to read products from local file system
+      val localPath = args(3)
+      val products = Source.
+        fromFile(localPath  + "/products/part-00000").
+        getLines()
+
+      val productsMap = products.map(product => (product.split(",")(0).toInt, product.split(",")(2)))
+      val bv = sc.broadcast(productsMap.toMap)
+      revenueByProductId.
+        map(product => bv.value.get(product._1).get + "\t" + product._2).
+        saveAsTextFile(outputPath)
+    }
+  }
+
+}
+
+--HelloWorld.java
+package demo;
+
+public class HelloWorld {
+	public static void main(String[] args) {
+		System.out.println("Hello World!!!");
+	}
+}
+
+--youthspark-index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+
+    <title>Document</title>
+    <style>
+        body {
+            background: url('http://www.srikanth.com/wp-content/uploads/2017/06/girlsintech.png');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-attachment: fixed;
+            -webkit-background-size: cover;
+            -moz-background-size: cover;
+            -o-background-size: cover;
+            background-size: cover;
+        }
+        /*label {
+            padding: 12px 20px;
+            width: 10%;
+            margin: 8px 0;
+            display: inline-block;
+            color: red;
+        }
+        input[type=text] {
+            padding: 12px 20px;
+            width: 20%;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }*/
+     </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-primary">Welcome to Youth Spark by Girls In Tech</h1>
+        <form class="form-horizontal">
+
+            <div class="form-group">
+                <label class="control-label col-sm-2 text-info"><b>Name</b></label>
+                <div class="col-sm-10">
+                    <input type="text" placeholder="Enter Name" name="name" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="control-label col-sm-2 text-info"><b>Contact Number</b></label>
+                <div class="col-sm-10">
+                    <input type="text" placeholder="Enter Contact Number" name="contact" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="control-label col-sm-2 text-info" for="email"><b>Email</b></label>
+                <div class="col-sm-10">
+                    <input type="text" placeholder="Enter Email Id" name="email" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="control-label col-sm-2 text-info"><b>Address</b></label>
+                <div class="col-sm-10">
+                    <input type="text" placeholder="Enter Address" name="address" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                    <button type="button" class="cancelbtn btn-primary">Cancel</button>
+                    <button type="submit" class="signupbtn btn-primary">Sign Up</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
+
+--scala-import-statements.scala
+
+import java.sql.DriverManager
+import com.typesafe.config._
+
+--scala-employeecommission.scala
+
+case class EmployeesCommission(first_name: String,
+                               last_name: String,
+                               salary: Double,
+                               commission_pct: Double) {
+  override def toString(): String = {
+    s"first_name: " + first_name + ";" + "last_name: " + last_name +
+      ";" + "commission amount:" + getCommissionAmount()
+  }
+
+  def getCommissionAmount(): Any = {
+    if(commission_pct == 0.0) {
+      "Not eligible"
+    } else salary * commission_pct
+  }
+}
+
+--scala-typesafeconfig-and-jdbc.scala
+
+    val props = ConfigFactory.load()
+    val driver = "com.mysql.jdbc.Driver"
+    val host = props.getConfig(args(0)).getString("host")
+    val port = props.getConfig(args(0)).getString("port")
+    val db = props.getConfig(args(0)).getString("db")
+    val url = "jdbc:mysql://" + host + ":" + port + "/" + db
+    val username = props.getConfig(args(0)).getString("user")
+    val password = props.getConfig(args(0)).getString("pw")
+
+    Class.forName(driver);
+    val connection = DriverManager.getConnection(url, username, password)
+	
+--scala-submit-sql-and-process-data.scala
+
+    val statement = connection.createStatement()
+    val resultSet = statement.executeQuery(s"SELECT first_name, last_name, " +
+      "salary, commission_pct FROM employees")
+
+    Iterator.
+      continually((resultSet.next(), resultSet)).
+      takeWhile(_._1).
+      map(r => {
+        EmployeesCommission(
+          r._2.getString("first_name"),
+          r._2.getString("last_name"),
+          r._2.getDouble("salary"),
+          r._2.getDouble("commission_pct")
+        )
+      }).
+      toList.
+      foreach(println)
+
+    //    while (resultSet.next()) {
+    //      val e = EmployeesCommission(resultSet.getString("first_name"),
+    //        resultSet.getString("last_name"),
+    //        resultSet.getDouble("salary"),
+    //        if(resultSet.getDouble("commission_pct").isNaN) -1.0 else resultSet.getDouble("commission_pct"))
+    //      println(e)
+    //    }
+
+	
+--scala-commission-amount.scala
+
+/**
+  * Created by srikanth 
+  */
+
+import java.sql.DriverManager
+import com.typesafe.config._
+
+case class EmployeesCommission(first_name: String,
+                               last_name: String,
+                               salary: Double,
+                               commission_pct: Double) {
+  override def toString(): String = {
+    s"first_name: " + first_name + ";" + "last_name: " + last_name +
+      ";" + "commission amount:" + getCommissionAmount()
+  }
+
+  def getCommissionAmount(): Any = {
+    if(commission_pct == 0.0) {
+      "Not eligible"
+    } else salary * commission_pct
+  }
+}
+
+object CommissionAmount {
+  def main(args: Array[String]): Unit = {
+    val props = ConfigFactory.load()
+    val driver = "com.mysql.jdbc.Driver"
+    val host = props.getConfig(args(0)).getString("host")
+    val port = props.getConfig(args(0)).getString("port")
+    val db = props.getConfig(args(0)).getString("db")
+    val url = "jdbc:mysql://" + host + ":" + port + "/" + db
+    val username = props.getConfig(args(0)).getString("user")
+    val password = props.getConfig(args(0)).getString("pw")
+
+    Class.forName(driver);
+    val connection = DriverManager.getConnection(url, username, password)
+    val statement = connection.createStatement()
+    val resultSet = statement.executeQuery(s"SELECT first_name, last_name, " +
+      "salary, commission_pct FROM employees")
+
+    // Functional way of processing resultset
+    Iterator.
+      continually((resultSet.next(), resultSet)).
+      takeWhile(_._1).
+      map(r => {
+        EmployeesCommission(
+          r._2.getString("first_name"),
+          r._2.getString("last_name"),
+          r._2.getDouble("salary"),
+          r._2.getDouble("commission_pct")
+        )
+      }).
+      toList.
+      foreach(println)
+
+    // Traditional way of processing the data
+    //    while (resultSet.next()) {
+    //      val e = EmployeesCommission(resultSet.getString("first_name"),
+    //        resultSet.getString("last_name"),
+    //        resultSet.getDouble("salary"),
+    //        if(resultSet.getDouble("commission_pct").isNaN) -1.0 else resultSet.getDouble("commission_pct"))
+    //      println(e)
+    //    }
+
+
+  }
+}
+
+--youthspark-css-example.html
+
+<style>
+  label {
+    padding: 12px 20px; 
+    width: 10%;
+    margin: 8px 0;
+    display: inline-block; 
+    color: red;
+  }
+  input[type=text] { 
+    padding: 12px 20px; 
+    width: 20%;
+    margin: 8px 0;
+    display: inline-block; 
+    border: 1px solid #ccc; 
+    box-sizing: border-box; 
+  }
+</style>
+
+--scala-spark-sql-build.sbt
+name := "sparkdemo"
+
+version := "1.0"
+
+scalaVersion := "2.10.5"
+
+libraryDependencies += "org.apache.spark" % "spark-core_2.10" % "1.6.3"
+libraryDependencies += "com.typesafe" % "config" % "1.3.0"
+libraryDependencies += "org.apache.spark" % "spark-sql_2.10" % "1.6.2"
+
+--scala-spark-sql-import.scala
+import com.typesafe.config.ConfigFactory
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+
+import org.apache.hadoop.fs._
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+
+--scala-spark-case-class-orders.scala
+case class Orders(
+                   order_id: Int,
+                   order_date: String,
+                   order_customer_id: Int,
+                   order_status: String)
+				   
+--scala-spark-sql-create-spark-context.scala
+
+val conf = new SparkConf().
+  setMaster("local").
+  setAppName("Spark SQL Demo")
+
+val sc = new SparkContext(conf)
+
+--scala-spark-sql-create-sql-context.scala
+val sqlContext = new SQLContext(sc)
+sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+
+import sqlContext.implicits._
+
+--scala-spark-create-data-frame.scala
+val inputPath = "/Users/itversity/Research/data/retail_db"
+val ordersDF = sc.textFile(inputPath + "/orders").
+  map(rec => {
+    val a = rec.split(",")
+    Orders(a(0).toInt, a(1).toString(), a(2).toInt, a(3).toString())
+  }).toDF()
+
+--scala-spark-few-dataframe-operations.scala
+
+val ordersFiltered = ordersDF.filter(ordersDF("order_status") === "COMPLETE")
+ordersFiltered.printSchema()
+ordersFiltered.show()
+ordersFiltered.select("order_id").show()
+
+--scala-spark-dataframes-operations-totalrevenueperday.scala
+
+package retail.dataframes
+
+import com.typesafe.config.ConfigFactory
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+
+import org.apache.hadoop.fs._
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+
+object TotalRevenueDaily {
+  def main(args: Array[String]) {
+    val appConf = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Total Revenue - Daily - Data Frames").
+      setMaster(appConf.getConfig(args(2)).getString("executionMode"))
+
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+    
+    import sqlContext.implicits._
+
+    val inputPath = args(0)
+    val outputPath = args(1)
+
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val inputPathExists = fs.exists(new Path(inputPath))
+    val outputPathExists = fs.exists(new Path(outputPath))
+
+    if (!inputPathExists) {
+      println("Input Path does not exists")
+      return
+    }
+
+    if (outputPathExists) {
+      fs.delete(new Path(outputPath), true)
+    }
+
+    val ordersDF = sc.textFile(inputPath + "/orders").
+      map(rec => {
+        val a = rec.split(",")
+        Orders(a(0).toInt, a(1).toString(), a(2).toInt, a(3).toString())
+      }).toDF()
+
+    val orderItemsDF = sc.textFile(inputPath + "/order_items").
+      map(rec => {
+        val a = rec.split(",")
+        OrderItems(
+          a(0).toInt,
+          a(1).toInt,
+          a(2).toInt,
+          a(3).toInt,
+          a(4).toFloat,
+          a(5).toFloat)
+      }).toDF()
+
+    val ordersFiltered = ordersDF.
+      filter(ordersDF("order_status") === "COMPLETE")
+    val ordersJoin = ordersFiltered.join(orderItemsDF,
+      ordersFiltered("order_id") === orderItemsDF("order_item_order_id"))
+
+    ordersJoin.
+      groupBy("order_date").
+      agg(sum("order_item_subtotal")).
+      sort("order_date").
+      rdd.
+      saveAsTextFile(outputPath)
+  }
+}
+
+--scala-spark-submit-totalrevenuedaily.sh
+
+spark-submit --class retail.dataframes.TotalRevenueDaily \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  sparkdemo_2.10-1.0.jar \
+  /public/retail_db /user/dgadiraju/totalrevenuedaily prod
+
+--scala-spark-dataframes-case-class-orderitems.scala
+package retail.dataframes
+
+case class OrderItems(
+                       order_item_id: Int,
+                       order_item_order_id: Int,
+                       order_item_product_id: Int,
+                       order_item_quantity: Int,
+                       order_item_subtotal: Float,
+                       order_item_price: Float)
+
+--scala-spark-dataframes-case-class-orders.scala
+
+package retail.dataframes
+
+case class Orders(
+                   order_id: Int,
+                   order_date: String,
+                   order_customer_id: Int,
+                   order_status: String)
+
+--scala-spark-dataframes-operations-totalrevenueperdaysql.scala
+
+package retail.dataframes
+
+import com.typesafe.config.ConfigFactory
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+
+import org.apache.hadoop.fs._
+import org.apache.spark.sql._
+
+object TotalRevenueDailySQL {
+  def main(args: Array[String]) {
+    val appConf = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Total Revenue - Daily - Data Frames").
+      setMaster(appConf.getConfig(args(2)).getString("deploymentMaster"))
+
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+
+    import sqlContext.implicits._
+
+    val inputPath = args(0)
+    val outputPath = args(1)
+
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val inputPathExists = fs.exists(new Path(inputPath))
+    val outputPathExists = fs.exists(new Path(outputPath))
+
+    if (!inputPathExists) {
+      println("Input Path does not exists")
+      return
+    }
+
+    if (outputPathExists) {
+      fs.delete(new Path(outputPath), true)
+    }
+
+    val ordersDF = sc.textFile(inputPath + "/orders").
+      map(rec => {
+        val a = rec.split(",")
+        Orders(a(0).toInt, a(1).toString(), a(2).toInt, a(3).toString())
+      }).toDF()
+
+    ordersDF.registerTempTable("orders")
+
+    val orderItemsDF = sc.textFile(inputPath + "/order_items").
+      map(rec => {
+        val a = rec.split(",")
+        OrderItems(
+          a(0).toInt,
+          a(1).toInt,
+          a(2).toInt,
+          a(3).toInt,
+          a(4).toFloat,
+          a(5).toFloat)
+      }).toDF()
+
+    orderItemsDF.registerTempTable("order_items")
+
+    val totalRevenueDaily = sqlContext.sql("select o.order_date, sum(oi.order_item_subtotal) " +
+      "from orders o join order_items oi " +
+      "on o.order_id = oi.order_item_order_id " +
+      "where o.order_status = 'COMPLETE' " +
+      "group by o.order_date " +
+      "order by o.order_date")
+
+    totalRevenueDaily.rdd.saveAsTextFile(outputPath)
+
+  }
+}
+
+--scala-spark-submit-totalrevenuedaily.sh
+
+spark-submit --class retail.dataframes.TotalRevenueDailySQL \
+  --master yarn \
+  --conf spark.ui.port=54123 \
+  sands201706_2.10-1.0.jar \
+  /public/retail_db /user/dgadiraju/totalrevenuedaily prod
+
+--scala-spark-create-databases.sql
+
+CREATE DATABASE sparkdemo;
+USE sparkdemo;
+
+CREATE TABLE orders (
+  order_id int,
+  order_date string,
+  order_customer_id int,
+  order_status string
+) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+LOAD DATA LOCAL INPATH '/data/retail_db/orders' INTO TABLE orders;
+
+CREATE TABLE order_items (
+  order_item_id int,
+  order_item_order_id int,
+  order_item_product_id int,
+  order_item_quantity smallint,
+  order_item_subtotal float,
+  order_item_product_price float
+) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+LOAD DATA LOCAL INPATH '/data/retail_db/order_items' INTO TABLE order_items;
+
+--scala-spark-sql-totalrevenuedaily.sql
+
+SET spark.sql.shuffle.partitions; //default 200
+SET spark.sql.shuffle.partitions = 2;
+SELECT o.order_date, sum(oi.order_item_subtotal) daily_revenue
+      FROM orders o JOIN order_items oi
+      ON o.order_id = oi.order_item_order_id
+      WHERE o.order_status = 'COMPLETE'
+      GROUP BY o.order_date
+      ORDER BY o.order_date;
+
+
+--scala-spark-sql-hive-context.scala
+// import org.apache.spark.sql.HiveContext;
+// val sqlContext = new HiveContext(sc);
+sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+sqlContext.sql("use sparkdemo")
+val s = ("select o.order_date, sum(oi.order_item_subtotal) daily_revenue" +
+      " from orders o join order_items oi " +
+      " on o.order_id = oi.order_item_order_id " +
+      " where o.order_status = 'COMPLETE' " +
+      " group by o.order_date " +
+      " order by o.order_date")
+
+      sqlContext.sql(s).
+        show
+
+sqlContext.sql("create table daily_revenue(order_date string, daily_revenue float)")
+
+val i = "insert into daily_revenue " + s
+sqlContext.sql(i)
+
+sqlContext.sql("select * from daily_revenue").show
+
+--scala-initialize-job-spark-shell.scala
+
+spark-shell --master yarn \
+  --conf spark.ui.port=12654
+  
+// hadoop fs -ls /public/retail_db
+// hadoop fs -du -s -h /public/retail_db
+// Properties files location /etc/spark/conf/
+spark-shell --master yarn \
+  --conf spark.ui.port=12654 \
+  --num-executors 1 \
+  --executor-memory 512M
+sc.getConf.getAll.foreach(println)
+
+//Initialize programmatically
+import org.apache.spark.{SparkConf, SparkContext}
+val conf = new SparkConf().setAppName("Daily Revenue").setMaster("yarn-client")
+val sc = new SparkContext(conf)
+sc.getConf.getAll.foreach(println)
+
+--scala-spark-dataframes-sql-native.scala
+
+// Register DF as temp table
+ordersDF.registerTempTable("orders")
+
+// Run query
+sqlContext.sql("select * from orders where order_status = 'COMPLETE' limit 10").
+  foreach(println)
+  
+--scala-spark-dataframes-operations-totalrevenueperday.scala
+package retail.dataframes
+
+case class Orders(
+  order_id: Int,
+  order_date: String,
+  order_customer_id: Int,
+  order_status: String) 
+
+case class OrderItems(
+  order_item_id: Int,
+  order_item_order_id: Int,
+  order_item_product_id: Int,
+  order_item_quantity: Int,
+  order_item_subtotal: Float,
+  order_item_price: Float)
+
+import com.typesafe.config.ConfigFactory
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+
+import org.apache.hadoop.fs._
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+
+object TotalRevenueDaily {
+  def main(args: Array[String]) {
+    val appConf = ConfigFactory.load()
+    val conf = new SparkConf().
+      setAppName("Total Revenue - Daily - Data Frames").
+      setMaster(appConf.getConfig(args(2)).getString("deploymentMaster"))
+
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+    
+    import sqlContext.implicits._
+
+    val inputPath = args(0)
+    val outputPath = args(1)
+
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val inputPathExists = fs.exists(new Path(inputPath))
+    val outputPathExists = fs.exists(new Path(outputPath))
+
+    if (!inputPathExists) {
+      println("Input Path does not exists")
+      return
+    }
+
+    if (outputPathExists) {
+      fs.delete(new Path(outputPath), true)
+    }
+
+    val ordersDF = sc.textFile(inputPath + "/orders").
+      map(rec => {
+        val a = rec.split(",")
+        Orders(a(0).toInt, a(1).toString(), a(2).toInt, a(3).toString())
+      }).toDF()
+
+    val orderItemsDF = sc.textFile(inputPath + "/order_items").
+      map(rec => {
+        val a = rec.split(",")
+        OrderItems(
+          a(0).toInt,
+          a(1).toInt,
+          a(2).toInt,
+          a(3).toInt,
+          a(4).toFloat,
+          a(5).toFloat)
+      }).toDF()
+
+    val ordersFiltered = ordersDF.
+      filter(ordersDF("order_status") === "COMPLETE")
+    val ordersJoin = ordersFiltered.join(orderItemsDF,
+      ordersFiltered("order_id") === orderItemsDF("order_item_order_id"))
+
+    ordersJoin.
+      groupBy("order_date").
+      agg(sum("order_item_subtotal")).
+      sort("order_date").
+      rdd.
+      saveAsTextFile(outputPath)
+
+  }
+}
+
+--scala-spark-dataframes-getting-started.scala
+
+import com.typesafe.config.ConfigFactory
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+
+import org.apache.hadoop.fs._
+
+// Data Frames import statements
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+
+// Define case class Orders
+case class Orders(
+  order_id: Int,
+  order_date: String,
+  order_customer_id: Int,
+  order_status: String) 
+
+// Creating conf and sc
+val conf = new SparkConf().
+  setAppName("Example").
+  setMaster("local")
+
+val sc = new SparkContext(conf)
+
+// Create sqlContext and set shuffle partitions
+val sqlContext = new SQLContext(sc)
+sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+    
+import sqlContext.implicits._
+
+// Read data and create data frame
+val inputPath = "/Users/dgadiraju/Research/data/retail_db"
+val ordersDF = sc.textFile(inputPath + "/orders").
+  map(rec => {
+    val a = rec.split(",")
+    Orders(a(0).toInt, a(1).toString(), a(2).toInt, a(3).toString())
+  }).toDF()
+
+// Data Frame operations
+val ordersFiltered = ordersDF.filter(ordersDF("order_status") === "COMPLETE")
+ordersFiltered.printSchema()
+ordersFiltered.show()
+ordersFiltered.select("order_id").show()
+
+--cca175-problem-06-spark-sql.scala
+
+// Step 2
+var hc = new org.apache.spark.sql.hive.HiveContext(sc);
+
+// Step 3
+var hiveResult = hc.sql("select d.department_id, " +
+  "p.product_id, p.product_name, p.product_price, " +
+  "rank() over (partition by d.department_id order by p.product_price) as product_price_rank, " +
+  "dense_rank() over (partition by d.department_id order by p.product_price) as product_dense_price_rank " +
+  "from products p inner join categories c on c.category_id = p.product_category_id " +
+  "inner join departments d on c.category_department_id = d.department_id " +
+  "order by d.department_id, product_price_rank desc, product_dense_price_rank");
+  
+// Step 4
+var hiveResult2 = hc.sql("select c.customer_id, c.customer_fname, " +
+  "count(distinct(oi.order_item_product_id)) unique_products " +
+  "from customers c inner join orders o on o.order_customer_id = c.customer_id " +
+  "inner join order_items oi on o.order_id = oi.order_item_order_id " +
+  "group by c.customer_id, c.customer_fname " +
+  "order by unique_products desc, c.customer_id limit 10")
+  
+// Step 5
+hiveResult.registerTempTable("product_rank_result_temp");
+hc.sql("select * from product_rank_result_temp where product_price < 100").show();
+
+// Step 6
+var topCustomers = hc.sql("select c.customer_id, c.customer_fname, " +
+  "count(distinct(oi.order_item_product_id)) unique_products " +
+  "from customers c inner join orders o on o.order_customer_id = c.customer_id " +
+  "inner join order_items oi on o.order_id = oi.order_item_order_id " +
+  "group by c.customer_id, c.customer_fname " +
+  "order by unique_products desc, c.customer_id limit 10");
+
+topCustomers.registerTempTable("top_cust");
+
+var topProducts = hc.sql("select distinct p.* from " +
+  "products p inner join order_items oi on oi.order_item_product_id = p.product_id " +
+  "inner join orders o on o.order_id = oi.order_item_order_id " +
+  "inner join top_cust tc on o.order_customer_id = tc.customer_id " +
+  "where p.product_price < 100");
+
+// Step 7
+hc.sql("create table problem6.product_rank_result " +
+  "as select * from product_rank_result_temp " +
+  "where product_price < 100");
+
+hc.sql("create table problem6.top_products " +
+  "as select distinct p.* from products p " +
+  "inner join order_items oi on oi.order_item_product_id = p.product_id " + 
+  "inner join orders o on o.order_id = oi.order_item_order_id " +
+  "inner join top_cust tc on o.order_customer_id = tc.customer_id " +
+  "where p.product_price < 100");
+  
+--cca175-problem-04-file-formats.scala
+
+// Step 1: 
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --password cloudera \
+  --username retail_dba \
+  --table orders \
+  --as-textfile \
+  --fields-terminated-by '\t' \
+  --target-dir /user/cloudera/problem5/text -m 1
+
+// Step 2: 
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --password cloudera \
+  --username retail_dba \
+  --table orders \
+  --as-avrodatafile \
+  --target-dir /user/cloudera/problem5/avro \
+  -m 1
+
+// Step 3: 
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --password cloudera \
+  --username retail_dba \
+  --table orders \
+  --as-parquetfile \
+  --target-dir /user/cloudera/problem5/parquet \
+  -m 1
+
+// Step 4: 
+var dataFile = sqlContext.read.avro("/user/cloudera/problem5/avro");
+sqlContext.setConf("spark.sql.parquet.compression.codec","snappy");
+dataFile.repartition(1).write.parquet("/user/cloudera/problem5/parquet-snappy-compress");
+dataFile.
+  map(x=> x(0)+"\t"+x(1)+"\t"+x(2)+"\t"+x(3)).
+  saveAsTextFile("/user/cloudera/problem5/text-gzip-compress", classOf[org.apache.hadoop.io.compress.GzipCodec]);
+dataFile.
+  map(x=> (x(0).toString,x(0)+"\t"+x(1)+"\t"+x(2)+"\t"+x(3))).
+  saveAsSequenceFile("/user/cloudera/problem5/sequence");
+
+// Below may fail in some cloudera VMS. 
+// If the spark command fails use the sqoop command to accomplish the problem. 
+// Remember you need to get out to spark shell to run the sqoop command. 
+
+dataFile.
+  map(x=> x(0)+"\t"+x(1)+"\t"+x(2)+"\t"+x(3)).
+  saveAsTextFile("/user/cloudera/problem5/text-snappy-compress", classOf[org.apache.hadoop.io.compress.SnappyCodec]);
+
+sqoop import --table orders \
+  --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --username retail_dba \
+  --password cloudera \
+  --as-textfile \
+  -m1 \
+  --target-dir user/cloudera/problem5/text-snappy-compress \
+  --compress --compression-codec org.apache.hadoop.io.compress.SnappyCodec
+
+// Step 5: 
+var parquetDataFile = sqlContext.read.parquet("/user/cloudera/problem5/parquet-snappy-compress")
+sqlContext.setConf("spark.sql.parquet.compression.codec","uncompressed");
+parquetDataFile.write.parquet("/user/cloudera/problem5/parquet-no-compress");
+sqlContext.setConf("spark.sql.avro.compression.codec","snappy");
+
+parquetDataFile.write.avro("/user/cloudera/problem5/avro-snappy");
+
+// Step 6: 
+var avroData = sqlContext.read.avro("/user/cloudera/problem5/avro-snappy");
+avroData.toJSON.saveAsTextFile("/user/cloudera/problem5/json-no-compress");
+avroData.toJSON.saveAsTextFile("/user/cloudera/problem5/json-gzip", classOf[org.apache.hadoop.io.GzipCodec]);
+
+// Step 7: 
+var jsonData = sqlContext.read.json("/user/cloudera/problem5/json-gzip");
+jsonData.
+  map(x=>x(0)+","+x(1)+","+x(2)+","+x(3)).
+  saveAsTextFile("/user/cloudera/problem5/csv-gzip", classOf[org.apache.hadoop.io.compress.GzipCodec])
+
+// Step 8: 
+//To read the sequence file you need to understand the sequence getter for the key and value class to //be used while loading the sequence file as a spark RDD.
+//In a new terminal Get the Sequence file to local file system
+hadoop fs -get /user/cloudera/problem5/sequence/part-00000
+//read the first 300 characters to understand the two classes to be used. 
+cut -c-300 part-00000
+
+//In spark shell do below
+var seqData = sc.
+  sequenceFile("/user/cloudera/problem5/sequence/", classOf[org.apache.hadoop.io.Text], classOf[org.apache.hadoop.io.Text]);
+seqData.
+  map(x => {
+    var d = x._2.toString.split("\t"); (d(0),d(1),d(2),d(3))
+  }).
+  toDF().
+  write.
+  orc("/user/cloudera/problem5/orc");
+
+// Contribution from Raphael L. Nascimento: 
+sqlContext.sql("SET spark.sql.parquet.compression.codec=snappy")
+
+--cca175-problem-03-evolve-avro-schema.sh
+use retail;
+select * from orders_avro as X where X.order_date in (
+  select inner.order_date from (
+    select Y.order_date, count(1) as total_orders 
+      from orders_avro as Y 
+      group by Y.order_date 
+      order by total_orders desc, Y.order_date desc 
+      limit 1
+  ) i
+);
+
+
+// Evolve Avro Schema  
+// 1. Get schema file
+hadoop fs -get /user/hive/schemas/order/orders.avsc
+// 2. Open schema file
+gedit orders.avsc
+// 3. Edit schema file
+{
+  "type" : "record",
+  "name" : "orders",
+  "doc" : "Sqoop import of orders",
+  "fields" : [ {
+    "name" : "order_id",
+    "type" : [ "null", "int" ],
+    "default" : null,
+    "columnName" : "order_id",
+    "sqlType" : "4"
+  }, {
+    "name" : "order_date",
+    "type" : [ "null", "long" ],
+    "default" : null,
+    "columnName" : "order_date",
+    "sqlType" : "93"
+  }, {
+    "name" : "order_customer_id",
+    "type" : [ "null", "int" ],
+    "default" : null,
+    "columnName" : "order_customer_id",
+    "sqlType" : "4"
+  },{
+    "name" : "order_style",
+    "type" : [ "null", "string" ],
+    "default" : null,
+    "columnName" : "order_style",
+    "sqlType" : "12"
+  }, {
+    "name" : "order_zone",
+    "type" : [ "null", "int" ],
+    "default" : null,
+    "columnName" : "order_zone",
+    "sqlType" : "4"
+  }, {
+    "name" : "order_status",
+    "type" : [ "null", "string" ],
+    "default" : null,
+    "columnName" : "order_status",
+    "sqlType" : "12"
+  } ],
+  "tableName" : "orders"
+}
+
+// 3. copy modified schema file to HDFS again
+hadoop fs -copyFromLocal -f orders.avsc /user/hive/schemas/order/orders.avsc
+
+--cca175-problem-03-partitioning.sh
+
+create database retail;
+
+create table orders_avro (
+  order_id int,
+  order_date date,
+  order_customer_id int,
+  order_status string)
+  partitioned by (order_month string)
+STORED AS AVRO;
+
+insert overwrite table orders_avro partition (order_month)
+select order_id, 
+  to_date(from_unixtime(cast(order_date/1000 as int))), 
+  order_customer_id, 
+  order_status, 
+  substr(from_unixtime(cast(order_date/1000 as int)),1,7) as order_month 
+from default.orders_sqoop;
+
+--cca175-problem-02-spark.scala
+
+var products = sc.textFile("/user/cloudera/products").
+  map(x=> {
+    var d = x.split('|'); (d(0).toInt,d(1).toInt,d(2).toString,d(3).toString,d(4).toFloat,d(5).toString)
+  });
+
+case class Product(
+  productID:Integer, 
+  productCatID: Integer, 
+  productName: String, 
+  productDesc:String, 
+  productPrice:Float, 
+  productImage:String
+);
+var productsDF = products.map(x=> Product(x._1,x._2,x._3,x._4,x._5,x._6)).toDF();
+
+// Step 4 - Data Frame API
+import org.apache.spark.sql.functions._
+var dataFrameResult = productsDF.
+  filter("productPrice < 100").
+  groupBy(col("productCategory")).
+  agg(max(col("productPrice")).alias("max_price"),
+      countDistinct(col("productID")).alias("tot_products"),
+      round(avg(col("productPrice")),2).alias("avg_price"),
+      min(col("productPrice")).alias("min_price")).
+  orderBy(col("productCategory"));
+dataFrameResult.show();
+
+// Step 4 - Spark SQL: 
+productsDF.registerTempTable("products");
+var sqlResult = sqlContext.sql("select product_category_id, max(product_price) as maximum_price, count(distinct(product_id)) as total_products, cast(avg(product_price) as decimal(10,2)) as average_price, min(product_price) as minimum_price from products where product_price <100 group by product_category_id order by product_category_id desc");
+sqlResult.show();
+
+// Step 4 - RDD aggregateByKey: 
+var rddResult = productsDF.map(x=>(x(1).toString.toInt,x(4).toString.toDouble)).aggregateByKey((0.0,0.0,0,9999999999999.0))((x,y)=>(math.max(x._1,y),x._2+y,x._3+1,math.min(x._4,y)),(x,y)=>(math.max(x._1,y._1),x._2+y._2,x._3+y._3,math.min(x._4,y._4))).map(x=> (x._1,x._2._1,(x._2._2/x._2._3),x._2._3,x._2._4)).sortBy(_._1, false);
+rddResult.collect().foreach(println);
+
+// Step 5: 
+import com.databricks.spark.avro._;
+sqlContext.setConf("spark.sql.avro.compression.codec","snappy")
+dataFrameResult.write.avro("/user/cloudera/problem2/products/result-df");
+sqlResult.write.avro("/user/cloudera/problem2/products/result-sql"); 
+rddResult.toDF().write.avro("/user/cloudera/problem2/products/result-rdd");;
+
+----write-processed-data-back-to-hdfs-csv.scala
+dataFrameResult.map(x=> x(0) + "," + x(1) + "," + x(2) + "," + x(3)).saveAsTextFile("/user/cloudera/problem1/result4a-csv")
+sqlResult.map(x=> x(0) + "," + x(1) + "," + x(2) + "," + x(3)).saveAsTextFile("/user/cloudera/problem1/result4b-csv")
+comByKeyResult.map(x=> x(0) + "," + x(1) + "," + x(2) + "," + x(3)).saveAsTextFile("/user/cloudera/problem1/result4c-csv")  
+
+--write-processed-data-back-to-hdfs-compressed-snappy.scala
+
+sqlContext.setConf("spark.sql.parquet.compression.codec","snappy");
+dataFrameResult.write.parquet("/user/cloudera/problem1/result4a-snappy");
+sqlResult.write.parquet("/user/cloudera/problem1/result4b-snappy");
+comByKeyResult.write.parquet("/user/cloudera/problem1/result4c-snappy");
+
+--orders-join-using-dataframe-operations.scala
+
+var joinedOrderDataDF = ordersDF
+.join(orderItemDF,ordersDF("order_id")===orderItemDF("order_item_order_id"))
+
+//step 4a
+import org.apache.spark.sql.functions._;
+
+var dataFrameResult = 
+dataFrameResult.show();
+
+joinedOrderDataDF.
+groupBy(to_date(from_unixtime(col("order_date")/1000)).alias("order_formatted_date"),col("order_status")).
+agg(round(sum("order_item_subtotal"),2).alias("total_amount"),countDistinct("order_id").alias("total_orders")).
+orderBy(col("order_formatted_date").desc,col("order_status"),col("total_amount").desc,col("total_orders"));
+
+//step 4b
+joinedOrderDataDF.registerTempTable("order_joined");
+
+var sqlResult = sqlContext.sql("select to_date(from_unixtime(cast(order_date/1000 as bigint))) as order_formatted_date, order_status, cast(sum(order_item_subtotal) as DECIMAL (10,2)) as total_amount, count(distinct(order_id)) as total_orders from order_joined group by to_date(from_unixtime(cast(order_date/1000 as bigint))), order_status order by order_formatted_date desc,order_status,total_amount desc, total_orders");
+
+sqlResult.show();
+
+//step 4c
+var comByKeyResult = 
+joinedOrderDataDF.
+map(x=> ((x(1).toString,x(3).toString),(x(8).toString.toFloat,x(0).toString))).
+combineByKey((x:(Float, String))=>(x._1,Set(x._2)),
+(x:(Float,Set[String]),y:(Float,String))=>(x._1 + y._1,x._2+y._2),
+(x:(Float,Set[String]),y:(Float,Set[String]))=>(x._1+y._1,x._2++y._2)).
+map(x=> (x._1._1,x._1._2,x._2._1,x._2._2.size)).
+toDF().
+orderBy(col("_1").desc,col("_2"),col("_3").desc,col("_4"));
+
+comByKeyResult.show();
+
+--create-orders-and-items-data-frames.scala
+
+import com.databricks.spark.avro._;
+   var ordersDF = sqlContext.read.avro("/user/cloudera/problem1/orders");
+   var orderItemDF = sqlContext.read.avro("/user/cloudera/problem1/order-items");
+   
+--jdbcdemo-dependencies-build.sbt
+
+name := "jdbcdemo"
+version := "1.0"
+scalaVersion := "2.11.8"
+
+libraryDependencies += "com.typesafe" % "config" % "1.3.1"
+libraryDependencies += "mysql" % "mysql-connector-java" % "5.1.36"
+
+--spark-scala-get-inactive-customers.scala
+
+/*
+spark-shell --master yarn \
+  --conf spark.ui.port=12345 \
+  --num-executors 1 \
+  --executor-cores 1 \
+  --executor-memory 2G
+*/
+
+import scala.io.Source
+
+val ordersRaw = Source.fromFile("/data/retail_db/orders/part-00000").getLines.toList
+val orders = sc.parallelize(ordersRaw)
+
+val customersRaw = Source.fromFile("/data/retail_db/customers/part-00000").getLines.toList
+val customers = sc.parallelize(customersRaw)
+
+val ordersMap = orders.
+  map(order => (order.split(",")(2).toInt, 1))
+val customersMap = customers.
+  map(c => (c.split(",")(0).toInt, (c.split(",")(2), c.split(",")(1))))
+val customersLeftOuterJoinOrders = customersMap.leftOuterJoin(ordersMap)
+val inactiveCustomersSorted = customersLeftOuterJoinOrders.
+  filter(t => t._2._2 == None).
+  map(rec => rec._2).
+  sortByKey()
+inactiveCustomersSorted.
+  map(rec => rec._1._1 + ", " + rec._1._2).
+  saveAsTextFile("/user/dgadiraju/solutions/solutions02/inactive_customers")
+  
+--spark-scala-validate-dates-in-crime-data.scala
+
+/*
+hadoop fs -ls -h /public/crime/csv
+spark-shell --master yarn \
+  --conf spark.ui.port=12345 \
+  --num-executors 6 \
+  --executor-cores 2 \
+  --executor-memory 2G
+*/
+
+// Solution using Core API
+val crimeData = sc.textFile("/public/crime/csv")
+val header = crimeData.first
+val crimeDataWithoutHeader = crimeData.filter(criminalRecord => criminalRecord != header)
+
+val rec = crimeDataWithoutHeader.first
+val distinctDates = crimeDataWithoutHeader.
+  map(criminalRecord => criminalRecord.split(",")(2).split(" ")(0)).
+  distinct.
+  collect.
+  sorted
+distinctDates.foreach(println)
+
+--spark-scala-get-monthly-crime-count-per-type.scala
+
+/*
+spark-shell --master yarn \
+  --conf spark.ui.port=12345 \
+  --num-executors 6 \
+  --executor-cores 2 \
+  --executor-memory 2G
+*/
+
+// Solution using Core API
+val crimeData = sc.textFile("/public/crime/csv")
+val header = crimeData.first
+val crimeDataWithoutHeader = crimeData.filter(criminalRecord => criminalRecord != header)
+
+/*
+// Logic to convert a record into tuple
+val rec = crimeDataWithoutHeader.first
+
+// Extract date eg: 12/31/2007
+// We need only year and month in YYYYMM format, 12/31/2007 -> 200712
+// Finally create tuple ((crime_month, crime_type), 1)
+val t = {
+  val r = rec.split(",")
+  val d = r(2).split(" ")(0) // 12/31/2007
+  val m = d.split("/")(2) + d.split("/")(0) //200712
+  ((m.toInt, r(5)), 1) //tuple
+}
+*/
+
+val criminalRecordsWithMonthAndType = crimeDataWithoutHeader.
+  map(rec => {
+    val r = rec.split(",")
+    val d = r(2).split(" ")(0) // 12/31/2007
+    val m = d.split("/")(2) + d.split("/")(0) //200712
+    ((m.toInt, r(5)), 1)  
+  })
+val crimeCountPerMonthPerType = criminalRecordsWithMonthAndType.
+  reduceByKey((total, value) => total + value)
+
+//((200707,WEAPONS VIOLATION),count) -> ((200707, count), "200707,count,WEAPONS VIOLATION")
+// 200707,count,WEAPONS VIOLATION
+val crimeCountPerMonthPerTypeSorted = crimeCountPerMonthPerType.
+  map(rec => ((rec._1._1, -rec._2), rec._1._1 + "\t" + rec._2 + "\t" + rec._1._2)).
+  sortByKey().
+  map(rec => rec._2)
+
+crimeCountPerMonthPerTypeSorted.
+  coalesce(1).
+  saveAsTextFile("/user/dgadiraju/solutions/solution01/crimes_by_type_by_month", 
+    classOf[org.apache.hadoop.io.compress.GzipCodec])
+	
+--spark-scala-get-monthly-crime-count-per-type-df.scala
+/*
+spark-shell --master yarn \
+  --conf spark.ui.port=12345 \
+  --num-executors 6 \
+  --executor-cores 2 \
+  --executor-memory 2G
+*/
+
+// Solution using data frame
+val crimeData = sc.textFile("/public/crime/csv")
+val header = crimeData.first
+val crimeDataWithoutHeader = crimeData.filter(criminalRecord => criminalRecord != header)
+
+val crimeDataWithDateAndTypeDF = crimeDataWithoutHeader.
+  map(rec => (rec.split(",")(2), rec.split(",")(5))).
+  toDF("crime_date", "crime_type")
+
+crimeDataWithDateAndTypeDF.registerTempTable("crime_data")
+
+val crimeCountPerMonthPerTypeDF = sqlContext.
+  sql("select cast(concat(substr(crime_date, 7, 4), substr(crime_date, 0, 2)) as int) crime_month, " +
+  "count(1) crime_count_per_month_per_type, " +
+  "crime_type " +
+  "from crime_data " +
+  "group by cast(concat(substr(crime_date, 7, 4), substr(crime_date, 0, 2)) as int), crime_type " +
+  "order by crime_month, crime_count_per_month_per_type desc")
+
+crimeCountPerMonthPerTypeDF.rdd.
+  map(rec => rec.mkString("\t")).
+  coalesce(1).
+  saveAsTextFile("/user/dgadiraju/solutions/solution01/crimes_by_type_by_month", 
+    classOf[org.apache.hadoop.io.compress.GzipCodec])
+	
+--spark-scala-get-inactive-customers-df.scala
+
+/*
+spark-shell --master yarn \
+  --conf spark.ui.port=12345 \
+  --num-executors 1 \
+  --executor-cores 1 \
+  --executor-memory 2G
+*/
+
+import scala.io.Source
+
+val ordersRaw = Source.fromFile("/data/retail_db/orders/part-00000").getLines.toList
+val ordersRDD = sc.parallelize(ordersRaw)
+
+val customersRaw = Source.fromFile("/data/retail_db/customers/part-00000").getLines.toList
+val customersRDD = sc.parallelize(customersRaw)
+
+val ordersDF = ordersRDD.
+  map(o => o.split(",")(2).toInt).
+  toDF("order_customer_id")
+val customersDF = customersRDD.
+  map(c => (c.split(",")(0).toInt, c.split(",")(1), c.split(",")(2))).
+  toDF("customer_id", "customer_fname", "customer_lname")
+
+ordersDF.registerTempTable("orders_dg")
+customersDF.registerTempTable("customers_dg")
+
+sqlContext.setConf("spark.sql.shuffle.partitions", "1")
+
+sqlContext.
+  sql("select customer_lname, customer_fname " + 
+      "from customers_dg left outer join orders_dg " +
+      "on customer_id = order_customer_id " +
+      "where order_customer_id is null " +
+      "order by customer_lname, customer_fname").
+  rdd.
+  map(rec => rec.mkString(", ")).
+  saveAsTextFile("/user/dgadiraju/solutions/solutions02/inactive_customers")
+  
+--spark-scala-get-top-3-crime-types-in-residence.scala
+/*
+spark-shell --master yarn \
+  --conf spark.ui.port=12345 \
+  --num-executors 6 \
+  --executor-cores 2 \
+  --executor-memory 2G
+*/
+
+// Solution using Core API
+val crimeData = sc.textFile("/public/crime/csv")
+val header = crimeData.first
+val crimeDataWithoutHeader = crimeData.filter(criminalRecord => criminalRecord != header)
+
+val crimeCountForResidence = sc.parallelize(crimeDataWithoutHeader.
+  filter(rec => rec.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1)(7) == "RESIDENCE").
+  map(rec => (rec.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1)(5), 1)).
+  reduceByKey((total, value) => total + value).
+  map(rec => (rec._2, rec._1)).
+  sortByKey(false).
+  take(3))
+
+crimeCountForResidence.
+  map(rec => (rec._2, rec._1)).
+  toDF("crime_type", "crime_count").
+  write.json("user/dgadiraju/solutions/solution03/RESIDENCE_AREA_CRIMINAL_TYPE_DATA")
+  
+--spark-scale-get-top-3-crime-types-in-residence-df.scala
+
+/*
+spark-shell --master yarn \
+  --conf spark.ui.port=12345 \
+  --num-executors 6 \
+  --executor-cores 2 \
+  --executor-memory 2G
+*/
+
+// Solution using Core API
+val crimeData = sc.textFile("/public/crime/csv")
+val header = crimeData.first
+val crimeDataWithoutHeader = crimeData.filter(criminalRecord => criminalRecord != header)
+
+val crimeDataWithoutHeaderDF = crimeDataWithoutHeader.
+  map(rec => {
+    val r = rec.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1)
+    (r(7), r(5))
+  }).toDF("location_description", "crime_type")
+
+crimeDataWithoutHeaderDF.registerTempTable("crime_data")
+
+sqlContext.setConf("spark.sql.shuffle.partitions", "4")
+sqlContext.sql("select * from (" +
+                 "select crime_type, count(1) crime_count " +
+                 "from crime_data " +
+                 "where location_description = 'RESIDENCE' " +
+                 "group by crime_type " +
+                 "order by crime_count desc) q " +
+               "limit 3").
+  coalesce(1).
+  save("/user/dgadiraju/solutions/solution03/RESIDENCE_AREA_CRIMINAL_TYPE_DATA", "json")
+  
+  
+--spark-scala-convert-nyse-to-parquet.scala
+
+// hadoop fs -copyFromLocal /data/nyse /user/dgadiraju/nyse
+
+/*
+spark-shell --master yarn \
+  --conf spark.ui.port=12345 \
+  --num-executors 4
+*/
+
+val nyse = sc.textFile("/user/dgadiraju/nyse").
+  coalesce(4).
+  map(stock => {
+    val s = stock.split(",")
+    (s(0), s(1), s(2).toFloat, s(3).toFloat, s(4).toFloat, s(5).toFloat, s(6).toInt)
+  }).
+  toDF("stockticker", "transactiondate", "openprice", "highprice", "lowprice", "closeprice", "volume")
+  
+sqlContext.setConf("spark.sql.shuffle.partitions", "4")
+nyse.save("/user/dgadiraju/nyse_parquet", "parquet")
+//nyse.write.parquet("spark-scala-")
+
+--spark-scala-word-count.scala
+
+/*
+spark-shell --master yarn \
+  --conf spark.ui.port=12456 \
+  --num-executors 10 \
+  --executor-memory 3G \
+  --executor-cores 2 \
+  --packages com.databricks:spark-avro_2.10:2.0.1
+*/
+
+val lines = sc.textFile("/public/randomtextwriter")
+val words = lines.flatMap(line => line.split(" "))
+val tuples = words.map(word => (word, 1))
+val wordCount = tuples.reduceByKey((total, value) => total + value, 8)
+val wordCountDF = wordCount.toDF("word", "count")
+
+import com.databricks.spark.avro._
+wordCountDF.write.avro("/user/dgadiraju/solutions/solution05/wordcount")
+
+--spark-create-rdd.scala
+
+// RDD from files in HDFS
+val orders = sc.textFile("/public/retail_db/orders")
+
+// RDD from files in local file system
+val productsRaw = scala.io.Source.fromFile("/data/retail_db/products/part-00000").getLines.toList
+val products = sc.parallelize(productsRaw)
+
+--spark-previewing-data.scala
+val orders = sc.textFile("/public/retail_db/orders")
+
+// Previewing data
+orders.first
+orders.take(10).foreach(println)
+orders.count
+
+// Use collect with care. 
+// As it creates single threaded list from distributed RDD, 
+// using collect on larger datasets can cause out of memory issues.
+orders.collect.foreach(println)
+
+--spark-reading-files-using-sqlContext.scala
+
+// Reading different file formats
+
+// JSON files are under this location on the lab
+// You can download from github as well and copy to HDFS
+hadoop fs -ls /public/retail_db_json/orders
+
+sqlContext.read.json("/public/retail_db_json/orders").show
+sqlContext.load("/public/retail_db_json/orders", "json").show
+
+--spark-string-manipulation.scala
+
+//String Manipulation
+val str = orders.first
+val a = str.split(",")
+val orderId = a(0).toInt
+a(1).contains("2013")
+
+val orderDate = a(1)
+orderDate.substring(0, 10)
+orderDate.substring(5, 7)
+orderDate.substring(11)
+orderDate.replace('-', '/')
+orderDate.replace("07", "July")
+orderDate.indexOf("2")
+orderDate.indexOf("2", 2)
+orderDate.length
+
+--spark-row-level-transformations.scala
+
+// Row level transformations using map
+
+val orders = sc.textFile("/public/retail_db/orders")
+// 21,2013-07-25 00:00:00.0,11599,CLOSED -> 20130725 as Int
+val str = orders.first
+str.split(",")(1).substring(0, 10).replace("-", "").toInt
+
+val orderDates = orders.map((str: String) => {
+  str.split(",")(1).substring(0, 10).replace("-", "").toInt
+})
+
+val ordersPairedRDD = orders.map(order => {
+  val o = order.split(",")
+  (o(0).toInt, o(1).substring(0, 10).replace("-", "").toInt)
+})
+
+val orderItems = sc.textFile("/public/retail_db/order_items")
+val orderItemsPairedRDD = orderItems.map(orderItem => {
+  (orderItem.split(",")(1).toInt, orderItem)
+})
+
+-- spark-row-level-transformations-flatmap.scala
+// Row level transformations using flatMap
+
+val l = List("Hello", "How are you doing", "Let us perform word count", "As part of the word count program", "we will see how many times each word repeat")
+val l_rdd = sc.parallelize(l)
+val l_map = l_rdd.map(ele => ele.split(" "))
+val l_flatMap = l_rdd.flatMap(ele => ele.split(" "))
+val wordcount = l_flatMap.map(word => (word, "")).countByKey
+
+--sdc.conf
+
+# sdc.conf: A multiplex flume configuration
+# Source: log file
+# Sink 1: Unprocessed data to HDFS
+# Sink 2: Spark
+
+# Name the components on this agent
+sdc.sources = ws
+sdc.sinks = hd spark
+sdc.channels = hdmem sparkmem
+
+# Describe/configure the source
+sdc.sources.ws.type = exec
+sdc.sources.ws.command = tail -F /opt/gen_logs/logs/access.log
+
+# Describe the sink
+sdc.sinks.hd.type = hdfs
+sdc.sinks.hd.hdfs.path = hdfs://nn01.itversity.com:8020/user/dgadiraju/flume_demo
+
+sdc.sinks.hd.hdfs.filePrefix = FlumeDemo
+sdc.sinks.hd.hdfs.fileSuffix = .txt
+sdc.sinks.hd.hdfs.rollInterval = 120
+sdc.sinks.hd.hdfs.rollSize = 1048576
+sdc.sinks.hd.hdfs.rollCount = 100
+sdc.sinks.hd.hdfs.fileType = DataStream
+
+sdc.sinks.spark.type = org.apache.spark.streaming.flume.sink.SparkSink
+sdc.sinks.spark.hostname = gw01.itversity.com
+sdc.sinks.spark.port = 8123
+
+# Use a channel sdcich buffers events in memory
+sdc.channels.hdmem.type = memory
+sdc.channels.hdmem.capacity = 1000
+sdc.channels.hdmem.transactionCapacity = 100
+
+sdc.channels.sparkmem.type = memory
+sdc.channels.sparkmem.capacity = 1000
+sdc.channels.sparkmem.transactionCapacity = 100
+
+
+# Bind the source and sink to the channel
+sdc.sources.ws.channels = hdmem sparkmem
+sdc.sinks.hd.channel = hdmem
+sdc.sinks.spark.channel = sparkmem
+
+--build.sbt
+name := "retail"
+version := "1.0"
+scalaVersion := "2.10.6"
+
+libraryDependencies += "org.apache.spark" % "spark-core_2.10" % "1.6.3"
+libraryDependencies += "org.apache.spark" % "spark-streaming_2.10" % "1.6.3"
+libraryDependencies += "org.apache.spark" % "spark-streaming-flume_2.10" % "1.6.3"
+libraryDependencies += "org.apache.spark" % "spark-streaming-flume-sink_2.10" % "1.6.3"
+libraryDependencies += "org.scala-lang" % "scala-library" % "2.10.6"
+libraryDependencies += "org.apache.commons" % "commons-lang3" % "3.3.2"
+
+--FlumeStreamingDepartmentCount.scala
+
+import org.apache.spark.SparkConf
+import org.apache.spark.streaming.{StreamingContext,Seconds}
+import org.apache.spark.streaming.flume._
+
+object FlumeStreamingDepartmentCount {
+  def main(args: Array[String]) {
+    val conf = new SparkConf().
+      setAppName("Flume Streaming Word Count").
+      setMaster(args(0))
+    val ssc = new StreamingContext(conf, Seconds(30))
+
+    val stream = FlumeUtils.createPollingStream(ssc, args(1), args(2).toInt)
+    val messages = stream.
+      map(s => new String(s.event.getBody.array()))
+    val departmentMessages = messages.
+      filter(msg => {
+        val endPoint = msg.split(" ")(6)
+        endPoint.split("/")(1) == "department"
+      })
+    val departments = departmentMessages.
+      map(rec => {
+        val endPoint = rec.split(" ")(6)
+        (endPoint.split("/")(2), 1)
+      })
+    val departmentTraffic = departments.
+      reduceByKey((total, value) => total + value)
+    departmentTraffic.saveAsTextFiles("/user/dgadiraju/deptwisetraffic/cnt")
+
+    ssc.start()
+    ssc.awaitTermination()
+
+  }
+}
+
+--spark-submit-flumestreamingdepartmentcount.sh
+spark-submit \
+  --class FlumeStreamingDepartmentCount \
+  --master yarn \
+  --conf spark.ui.port=12986 \
+  --jars "/usr/hdp/2.5.0.0-1245/spark/lib/spark-streaming-flume-sink_2.10-1.6.2.jar,/usr/hdp/2.5.0.0-1245/spark/lib/spark-streaming-flume_2.10-1.6.2.jar,/usr/hdp/2.5.0.0-1245/flume/lib/commons-lang3-3.5.jar,/usr/hdp/2.5.0.0-1245/flume/lib/flume-ng-sdk-1.5.2.2.5.0.0-1245.jar" \
+  retail_2.10-1.0.jar yarn-client gw01.itversity.com 8123
+
+--GetDailyRevenueMR.scala
+
+// Get daily revenue for completed and closed orders
+val orders = sc.textFile("/public/retail_db/orders")
+// Get distinct order statuses
+orders.
+  map(o => o.split(",")(3)).
+  distinct.
+  collect.
+  foreach(println)
+
+// Filtering for completed and closed orders
+val ordersFiltered = orders.
+  filter(o => 
+    o.split(",")(3) == "COMPLETE" || o.split(",")(3) == "CLOSED")
+
+val orderItems = sc.textFile("/public/retail_db/order_items")
+
+val ordersMap = ordersFiltered.
+  map(o => (o.split(",")(0).toInt, o.split(",")(1)))
+val orderItemsMap = orderItems.
+  map(oi => (oi.split(",")(1).toInt, oi.split(",")(4).toDouble))
+
+val ordersJoin = ordersMap.join(orderItemsMap)
+
+val ordersJoinMap = ordersJoin.
+  map(o => o._2)
+/*
+(2014-05-23 00:00:00.0,119.98)
+(2014-05-23 00:00:00.0,400.0)
+(2014-05-23 00:00:00.0,399.98)
+(2014-05-23 00:00:00.0,199.95)
+(2014-05-23 00:00:00.0,199.98)
+
+(2014-05-23 00:00:00.0, [119.98, 400.0, 399.98, 199.95, 199.98])
+*/
+val revenuePerDay = ordersJoinMap.
+  reduceByKey((curr, next) => curr + next)
+
+revenuePerDay.
+  map(o => o._1 + "\t" + o._2).
+  saveAsTextFile("/user/dgadiraju/revenuePerDay20180111")
+
+sc.textFile("/user/dgadiraju/revenuePerDay20180111").
+  take(10).
+  foreach(println)
+
+--SparkFilteringExample.scala
+
+// Filtering data
+orders.filter(order => order.split(",")(3) == "COMPLETE")
+orders.count
+orders.filter(order => order.split(",")(3) == "COMPLETE").count
+// Get all the orders from 2013-09 which are in closed or complete
+orders.map(order => order.split(",")(3)).distinct.collect.foreach(println)
+val ordersFiltered = orders.filter(order => {
+  val o = order.split(",")
+  (o(3) == "COMPLETE" || o(3) == "CLOSED") && (o(1).contains("2013-09"))
+})
+ordersFiltered.take(10).foreach(println)
+ordersFiltered.count
+
+--SparkJoinsExample.scala
+// Joining orders and order_items
+val orders = sc.textFile("/public/retail_db/orders")
+val orderItems = sc.textFile("/public/retail_db/order_items")
+val ordersMap = orders.map(order => {
+  (order.split(",")(0).toInt, order.split(",")(1).substring(0, 10))
+})
+val orderItemsMap = orderItems.map(orderItem => {
+  val oi = orderItem.split(",")
+  (oi(1).toInt, oi(4).toFloat)
+})
+val ordersJoin = ordersMap.join(orderItemsMap)
+
+--SparkOuterJoinExample.scala
+
+// Get all the orders which do not have corresponding entries in order items
+val orders = sc.textFile("/public/retail_db/orders")
+val orderItems = sc.textFile("/public/retail_db/order_items")
+val ordersMap = orders.map(order => {
+  (order.split(",")(0).toInt, order)
+})
+val orderItemsMap = orderItems.map(orderItem => {
+  val oi = orderItem.split(",")
+  (oi(1).toInt, orderItem)
+})
+val ordersLeftOuterJoin = ordersMap.leftOuterJoin(orderItemsMap)
+val ordersLeftOuterJoinFilter = ordersLeftOuterJoin.filter(order => order._2._2 == None)
+val ordersWithNoOrderItem = ordersLeftOuterJoinFilter.map(order => order._2._1)
+ordersWithNoOrderItem.take(10).foreach(println)
+val ordersRightOuterJoin = orderItemsMap.rightOuterJoin(ordersMap)
+val ordersWithNoOrderItem = ordersRightOuterJoin.
+  filter(order => order._2._1 == None).
+  map(order => order._2._2)
+ordersWithNoOrderItem.take(10).foreach(println)
+
+--SparkAggregationsActions.scala
+
+// Aggregations - using actions
+val orders = sc.textFile("/public/retail_db/orders")
+orders.map(order => (order.split(",")(3), "")).countByKey.foreach(println)
+val orderItems = sc.textFile("/public/retail_db/order_items")
+val orderItemsRevenue = orderItems.map(oi => oi.split(",")(4).toFloat)
+orderItemsRevenue.reduce((total, revenue) => total + revenue)
+val orderItemsMaxRevenue = orderItemsRevenue.reduce((max, revenue) => {
+  if(max < revenue) revenue else max
+})
+
+--SparkAggregationsGroupByKeyExample.scala
+
+// Aggregations - groupByKey
+//1, (1 to 1000) - sum(1 to 1000) => 1 + 2+ 3+ .....1000
+//1, (1 to 1000) - sum(sum(1, 250), sum(251, 500), sum(501, 750), sum(751, 1000))
+val orderItems = sc.textFile("/public/retail_db/order_items")
+val orderItemsMap = orderItems.
+  map(oi => (oi.split(",")(1).toInt, oi.split(",")(4).toFloat))
+val orderItemsGBK = orderItemsMap.groupByKey
+//Get revenue per order_id
+orderItemsGBK.map(rec => (rec._1, rec._2.toList.sum)).take(10).foreach(println)
+//Get data in descending order by order_item_subtotal for each order_id
+val ordersSortedByRevenue = orderItemsGBK.
+  flatMap(rec => {
+    rec._2.toList.sortBy(o => -o).map(k => (rec._1, k))
+  })
+
+--SparkAggregationsReduceByKeyExample.scala
+
+// Aggregations - reduceByKey
+val orderItems = sc.textFile("/public/retail_db/order_items")
+val orderItemsMap = orderItems.
+  map(oi => (oi.split(",")(1).toInt, oi.split(",")(4).toFloat))
+
+val revenuePerOrderId = orderItemsMap.
+  reduceByKey((total, revenue) => total + revenue)
+
+val minRevenuePerOrderId = orderItemsMap.
+  reduceByKey((min, revenue) => if(min > revenue) revenue else min)
+
+--SparkAggregationsAggregateByKeyExample.scala
+
+// Aggregations - aggregateByKey
+val orderItems = sc.textFile("/public/retail_db/order_items")
+val orderItemsMap = orderItems.
+  map(oi => (oi.split(",")(1).toInt, oi.split(",")(4).toFloat))
+
+//(order_id, order_item_subtotal)
+val revenueAndMaxPerProductId = orderItemsMap.
+  aggregateByKey((0.0f, 0.0f))(
+    (inter, subtotal) => (inter._1 + subtotal, if(subtotal > inter._2) subtotal else inter._2),
+    (total, inter) => (total._1 + inter._1, if(total._2 > inter._2) total._2 else inter._2)
+  )
+//(order_id, (order_revenue, max_order_item_subtotal))
+
+--SparkSortingSortByKeyExample.scala
+
+// Sorting - sortByKey
+val products = sc.textFile("/public/retail_db/products")
+val productsMap = products.
+  map(product => (product.split(",")(1).toInt, product))
+val productsSortedByCategoryId = productsMap.sortByKey(false)
+
+val productsMap = products.
+  filter(product => product.split(",")(4) != "").
+  map(product => ((product.split(",")(1).toInt, -product.split(",")(4).toFloat), product))
+
+val productsSortedByCategoryId = productsMap.sortByKey().map(rec => rec._2)
+
+--SparkGlobalRankingExample.scala
+
+// Ranking - Global (details of top 10 products)
+val products = sc.textFile("/public/retail_db/products")
+val productsMap = products.
+  filter(product => product.split(",")(4) != "").
+  map(product => (product.split(",")(4).toFloat, product))
+val productsSortedByPrice = productsMap.sortByKey(false)
+productsSortedByPrice.take(10).foreach(println)
+val products = sc.textFile("/public/retail_db/products")
+products.
+  filter(product => product.split(",")(4) != "").
+  takeOrdered(10)(Ordering[Float].reverse.on(product => product.split(",")(4).toFloat)).
+  foreach(println)
+
+--SparkRankingGroupByKey.scala
+
+// Ranking - Get top N priced products with in each product category
+val products = sc.textFile("/public/retail_db/products")
+val productsMap = products.
+  filter(product => product.split(",")(4) != "").
+  map(product => (product.split(",")(1).toInt, product))
+val productsGroupByCategory = productsMap.groupByKey
+
+--TopNPrices.scala
+
+val productsIterable = productsGroupByCategory.first._2
+val productPrices = productsIterable.map(p => p.split(",")(4).toFloat).toSet
+val topNPrices = productPrices.toList.sortBy(p => -p).take(5)
+
+-- TopNPricedProducts.scala
+// Function to get top n priced products using Scala collections API
+
+val products = sc.textFile("/public/retail_db/products")
+val productsMap = products.
+  filter(product => product.split(",")(4) != "").
+  map(product => (product.split(",")(1).toInt, product))
+val productsGroupByCategory = productsMap.groupByKey
+
+def getTopNPricedProducts(productsIterable: Iterable[String], topN: Int): Iterable[String] = {
+  val productPrices = productsIterable.map(p => p.split(",")(4).toFloat).toSet
+  val topNPrices = productPrices.toList.sortBy(p => -p).take(topN)
+
+  val productsSorted = productsIterable.toList.sortBy(product => -product.split(",")(4).toFloat)
+  val minOfTopNPrices = topNPrices.min
+
+  val topNPricedProducts = productsSorted.takeWhile(product => product.split(",")(4).toFloat >= minOfTopNPrices)
+
+  topNPricedProducts
+}
+
+val productsIterable = productsGroupByCategory.first._2
+getTopNPricedProducts(productsIterable, 3).foreach(println)
+
+--SparkRankingExample.scala
+
+// Ranking - Get top N priced products with in each product category
+
+val products = sc.textFile("/public/retail_db/products")
+val productsMap = products.
+  filter(product => product.split(",")(4) != "").
+  map(product => (product.split(",")(1).toInt, product))
+val productsGroupByCategory = productsMap.groupByKey
+
+def getTopNPricedProducts(productsIterable: Iterable[String], topN: Int): Iterable[String] = {
+  val productPrices = productsIterable.map(p => p.split(",")(4).toFloat).toSet
+  val topNPrices = productPrices.toList.sortBy(p => -p).take(topN)
+
+  val productsSorted = productsIterable.toList.sortBy(product => -product.split(",")(4).toFloat)
+  val minOfTopNPrices = topNPrices.min
+
+  val topNPricedProducts = productsSorted.takeWhile(product => product.split(",")(4).toFloat >= minOfTopNPrices)
+
+  topNPricedProducts
+}
+
+val top3PricedProductsPerCategory = productsGroupByCategory.flatMap(rec => getTopNPricedProducts(rec._2, 3))
+
+
+--SparkSetOperationsExample.scala
+
+// Set operations
+
+val orders = sc.textFile("/public/retail_db/orders")
+val customers_201308 = orders.
+  filter(order => order.split(",")(1).contains("2013-08")).
+  map(order => order.split(",")(2).toInt)
+
+val customers_201309 = orders.
+  filter(order => order.split(",")(1).contains("2013-09")).
+  map(order => order.split(",")(2).toInt)
+
+// Get all the customers who placed orders in 2013 August and 2013 September
+val customers_201308_and_201309 = customers_201308.intersection(customers_201309)
+
+// Get all unique customers who placed orders in 2013 August or 2013 September
+val customers_201308_union_201309 = customers_201308.union(customers_201309).distinct
+
+// Get all customers who placed orders in 2013 August but not in 2013 September
+val customer_201308_minus_201309 = customers_201308.map(c => (c, 1)).
+  leftOuterJoin(customers_201309.map(c => (c, 1))).
+  filter(rec => rec._2._2 == None).
+  map(rec => rec._1).
+  distinct
+
+--launching-spark-shell.sh
+
+// Launch Spark Shell - Understand the environment and use resources optimally
+spark-shell --master yarn \
+--num-executors 1 \
+--executor-memory 512M \
+--conf spark.ui.port=12673
+
+--SparkReadFilterAndJoin.scala  
+
+// Read orders and order_items
+val orders = sc.textFile("/public/retail_db/orders")
+val orderItems = sc.textFile("/public/retail_db/order_items")
+
+orders.first
+orderItems.first
+
+orders.take(10).foreach(println)
+orderItems.take(10).foreach(println)
+
+// Filter for completed or closed orders
+orders.
+  map(order => order.split(",")(3)).
+  distinct.
+  collect.
+  foreach(println)
+val ordersFiltered = orders.
+  filter(order => order.split(",")(3) == "COMPLETE" || order.split(",")(3) == "CLOSED")
+ordersFiltered.take(100).foreach(println)
+
+// Convert both filtered orders and order_items to key value pairs
+val ordersMap = ordersFiltered.
+  map(order => (order.split(",")(0).toInt, order.split(",")(1)))
+val orderItemsMap = orderItems.
+  map(oi => (oi.split(",")(1).toInt,(oi.split(",")(2).toInt, oi.split(",")(4).toFloat)))
+
+ordersMap.take(10).foreach(println)
+orderItemsMap.take(10).foreach(println)
+
+// Join the two data sets
+val ordersJoin = ordersMap.join(orderItemsMap)
+ordersJoin.take(10).foreach(println)
+ordersJoin.count
+
+--SparkComputeDailyRevenue.scala
+//(order_id, (order_date, (order_item_product_id, order_item_subtotal)))
+// Get daily revenue per product id
+val ordersJoinMap = ordersJoin.map(rec => ((rec._2._1, rec._2._2._1), rec._2._2._2))
+ordersJoinMap.take(10).foreach(println)
+ordersJoinMap.count
+//((order_date, order_item_product_id), order_item_subtotal)
+val dailyRevenuePerProductId = ordersJoinMap.
+  reduceByKey((revenue, order_item_subtotal) => revenue + order_item_subtotal)
+dailyRevenuePerProductId.take(10).foreach(println)
+dailyRevenuePerProductId.count
+//((order_date, order_item_product_id), daily_revenue_per_product_id)
+
+--SparkJoinProductsFromLocal.scala
+
+// Load products from local file system and convert into RDD /data/retail_db/products/part-00000
+
+import scala.io.Source
+val productsRaw = Source.
+  fromFile("/data/retail_db/products/part-00000").
+  getLines.
+  toList
+val products = sc.parallelize(productsRaw)
+products.take(10).foreach(println)
+products.count
+
+// Join daily revenue per product id with products to get daily revenue per product (by name)
+val productsMap = products.
+  map(product => (product.split(",")(0).toInt, product.split(",")(2)))
+productsMap.take(10).foreach(println)
+productsMap.count
+
+//((order_date, order_product_id), daily_revenue_per_product_id)
+val dailyRevenuePerProductIdMap = dailyRevenuePerProductId.
+  map(rec => (rec._1._2, (rec._1._1, rec._2)))
+dailyRevenuePerProductIdMap.take(10).foreach(println)
+//(order_product_id, (order_date, daily_revenue_per_product_id))
+
+val dailyRevenuePerProductJoin = dailyRevenuePerProductIdMap.join(productsMap)
+//(order_product_id, ((order_date, daily_revenue_per_product_id), product_name))
+
+--SparkSortAndSave.scala
+
+// Sort the data by date in ascending order and by daily revenue per product in descending order
+val dailyRevenuePerProductSorted = dailyRevenuePerProductJoin.
+  map(rec => ((rec._2._1._1, -rec._2._1._2), (rec._2._1._1, rec._2._1._2, rec._2._2))).
+  sortByKey()
+dailyRevenuePerProductSorted.take(100).foreach(println)
+//((order_date_asc, daily_revenue_per_product_id_desc), (order_date,daily_revenue_per_product,product_name))
+
+// Get data to desired format – order_date,daily_revenue_per_product,product_name
+val dailyRevenuePerProduct = dailyRevenuePerProductSorted.
+  map(rec => rec._2._1 + "," + rec._2._2 + "," + rec._2._3)
+dailyRevenuePerProduct.take(10).foreach(println)
+
+// Save final output into HDFS in avro file format as well as text file format
+// HDFS location – avro format /user/YOUR_USER_ID/daily_revenue_avro_scala
+// HDFS location – text format /user/YOUR_USER_ID/daily_revenue_txt_scala
+dailyRevenuePerProduct.saveAsTextFile("/user/dgadiraju/daily_revenue_txt_scala")
+sc.textFile("/user/dgadiraju/daily_revenue_txt_scala").take(10).foreach(println)
+// Copy both from HDFS to local file system
+// /home/YOUR_USER_ID/daily_revenue_scala
+// mkdir daily_revenue_scala
+// hadoop fs -get /user/dgadiraju/daily_revenue_txt_scala \
+// /home/dgadiraju/daily_revenue_scala/daily_revenue_txt_scala
+// cd daily_revenue_scala/daily_revenue_txt_scala/
+// ls -ltr
+
+--spark-shell-commands.sh
+
+#Check data sizes
+
+hadoop fs -du -s -h /public/retail_db/orders
+hadoop fs -du -s -h /public/retail_db/order_items
+
+#Initialize spark job
+
+spark-shell --master yarn \
+  --deploy-mode client \
+  --conf spark.ui.port=12335 \
+  --num-executors 1 \
+  --executor-memory 2048M
+
+
+
+
+

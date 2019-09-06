@@ -1,0 +1,298 @@
+--flume-logger-hdfs.conf
+
+# flume-logger-hdfs.conf: Read data from logs and write it to both logger and hdfs
+# flume command to start the agent - flume-ng agent --name a1 --conf /home/dgadiraju/flume_example/example.conf --conf-file example.conf
+
+# Name the components on this agent
+a1.sources = logsource
+a1.sinks = loggersink hdfssink
+a1.channels = loggerchannel hdfschannel
+
+# Describe/configure the source
+a1.sources.logsource.type = exec
+a1.sources.logsource.command = tail -F /opt/gen_logs/logs/access.log
+
+# Describe the sink
+a1.sinks.loggersink.type = logger
+
+# Use a channel which buffers events in memory
+a1.channels.loggerchannel.type = memory
+a1.channels.loggerchannel.capacity = 1000
+a1.channels.loggerchannel.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+a1.sources.logsource.channels = loggerchannel hdfschannel
+a1.sinks.loggersink.channel = loggerchannel
+
+#Describe the sink
+a1.sinks.hdfssink.type = hdfs
+a1.sinks.hdfssink.hdfs.path = hdfs://nn01.srikanth.com:8020/user/dgadiraju/flume_example_%Y-%m-%d
+a1.sinks.hdfssink.hdfs.fileType = DataStream
+a1.sinks.hdfssink.hdfs.rollInterval = 120
+a1.sinks.hdfssink.hdfs.rollSize = 10485760
+a1.sinks.hdfssink.hdfs.rollCount = 30
+a1.sinks.hdfssink.hdfs.filePrefix = retail
+a1.sinks.hdfssink.hdfs.fileSuffix = .txt
+a1.sinks.hdfssink.hdfs.inUseSuffix = .tmp
+a1.sinks.hdfssink.hdfs.useLocalTimeStamp = true
+
+#Use a channel which buffers events in file for HDFS sink
+a1.channels.hdfschannel.type = file
+a1.channels.hdfschannel.capacity = 1000
+a1.channels.hdfschannel.transactionCapacity = 100
+a1.channels.hdfschannel.checkpointInterval = 300
+
+a1.sinks.hdfssink.channel = hdfschannel
+
+--flume-to-kafka.conf
+
+# kandf.conf: Flume and Kafka integration
+# Read streaming data from logs and push it to Kafka as sink
+
+# Name the components on this agent
+kandf.sources = logsource
+kandf.sinks = ksink
+kandf.channels = mchannel
+
+# Describe/configure the source
+kandf.sources.logsource.type = exec
+kandf.sources.logsource.command = tail -F /opt/gen_logs/logs/access.log
+
+# Describe the sink
+# Flume version is 1.5.2
+# Make sure all kafka related jar files are available under 
+# /usr/hdp/2.5.0.0-1245/flume/lib
+kandf.sinks.ksink.type = org.apache.flume.sink.kafka.KafkaSink
+kandf.sinks.ksink.brokerList = nn01.srikanth.com:6667,nn02.srikanth.com:6667,rm01.srikanth.com:6667
+kandf.sinks.ksink.topic = kafkadg
+
+# Use a channel which buffers events in memory
+kandf.channels.mchannel.type = memory
+kandf.channels.mchannel.capacity = 1000
+kandf.channels.mchannel.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+kandf.sources.logsource.channels = mchannel
+kandf.sinks.ksink.channel = mchannel
+
+# Once you start agent run consumer command from this gist
+# https://gist.github.com/dgadiraju/c4ed3195e563779e97a1658598269652
+
+
+--flume-to-kafka-and-hdfs.conf
+
+# fmp.conf: a multiplex agent to save one copy of data in HDFS and 
+# other copy streamed to Kafka so that data can be processed by 
+# streaming technologies such as Spark Streaming
+
+# Name the components on this agent
+fmp.sources = logsource
+fmp.sinks = kafkasink hdfssink
+fmp.channels = kafkachannel hdfschannel
+
+# Describe/configure the source
+fmp.sources.logsource.type = exec
+fmp.sources.logsource.command = tail -F /opt/gen_logs/logs/access.log
+
+# Describe the kafka sink
+fmp.sinks.kafkasink.type = org.apache.flume.sink.kafka.KafkaSink
+fmp.sinks.kafkasink.brokerList = nn01.srikanth.com:6667,nn02.srikanth.com:6667,rm01.srikanth.com:6667
+fmp.sinks.kafkasink.topic = kafkadg
+
+# Describe the HDFS sink
+fmp.sinks.hdfssink.type = hdfs
+fmp.sinks.hdfssink.hdfs.path = hdfs://nn01.srikanth.com:8020/user/dgadiraju/wllabssa/flume_example_%Y-%m-%d
+fmp.sinks.hdfssink.hdfs.fileType = DataStream
+fmp.sinks.hdfssink.hdfs.rollInterval = 120
+fmp.sinks.hdfssink.hdfs.rollSize = 10485760
+fmp.sinks.hdfssink.hdfs.rollCount = 100
+fmp.sinks.hdfssink.hdfs.filePrefix = retail
+fmp.sinks.hdfssink.hdfs.fileSuffix = .txt
+fmp.sinks.hdfssink.hdfs.inUseSuffix = .tmp
+fmp.sinks.hdfssink.hdfs.useLocalTimeStamp = true
+
+# Use a channel which buffers events in memory for kafkasink
+fmp.channels.kafkachannel.type = memory
+fmp.channels.kafkachannel.capacity = 1000
+fmp.channels.kafkachannel.transactionCapacity = 100
+
+# Use a channel which buffers events in file for hdfssink
+fmp.channels.hdfschannel.type = file
+fmp.channels.hdfschannel.capacity = 1000
+fmp.channels.hdfschannel.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+fmp.sources.logsource.channels = hdfschannel kafkachannel
+fmp.sinks.kafkasink.channel = kafkachannel
+fmp.sinks.hdfssink.channel = hdfschannel
+
+--cca175-problem-07-step-02-flume.sh
+mkdir flume-logs
+cd flume-logs
+
+// create flume configuration file
+
+# Name the components on this agent
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# Describe/configure the source
+a1.sources.r1.type = exec
+a1.sources.r1.command = tail -F /opt/gen_logs/logs/access.log
+
+
+# Describe the sink
+a1.sinks.k1.type = hdfs
+a1.sinks.k1.hdfs.path = /user/cloudera/problem7/step2
+a1.sinks.k1.hdfs.fileSuffix = .log
+a1.sinks.k1.hdfs.writeFormat = Text
+a1.sinks.k1.hdfs.fileType = DataStream
+
+# Use a channel which buffers events in memory
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 200
+
+# Bind the source and sink to the channel
+a1.sources.r1.channels = c1
+
+a1.sinks.k1.channel = c1
+
+// create hdfs sink directory
+hadoop fs -mkdir /user/cloudera/problem7/sink
+
+// Run the flume-agent
+flume-ng agent --name a1 --conf . --conf-file f.config\
+
+--cca175-problem-07-step-01-flume.sh
+
+// Pull orders data from order sqoop table to \user\cloudera\problem7\prework
+
+sqoop import \
+  --table orders \
+  --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --username retail_dba \
+  --password cloudera \
+  -m 1 \
+  --target-dir /user/cloudera/problem7/prework \
+  --as-avrodatafile
+
+// Get the file from HDFS to local 
+
+mkdir flume-avro;
+cd flume-avro;
+hadoop fs -get /user/cloudera/problem7/prework/* .
+gedit f.config
+
+// Create a flume-config file in problem7 folder named f.config
+
+#Agent Name = step1
+
+# Name the source, channel and sink
+step1.sources = avro-source  
+step1.channels = jdbc-channel
+step1.sinks = file-sink
+
+# Source configuration
+step1.sources.avro-source.type = avro
+step1.sources.avro-source.port = 11112
+step1.sources.avro-source.bind = localhost
+
+
+# Describe the sink
+step1.sinks.file-sink.type = hdfs
+step1.sinks.file-sink.hdfs.path = /user/cloudera/problem7/sink
+step1.sinks.file-sink.hdfs.fileType = DataStream
+step1.sinks.file-sink.hdfs.fileSuffix = .avro
+step1.sinks.file-sink.serializer = avro_event
+step1.sinks.file-sink.serializer.compressionCodec=snappy
+
+# Describe the type of channel --  Use memory channel if jdbc channel does not work
+step1.channels.jdbc-channel.type = jdbc
+
+# Bind the source and sink to the channel
+step1.sources.avro-source.channels = jdbc-channel
+step1.sinks.file-sink.channel = jdbc-channel
+
+// Run the flume agent
+
+flume-ng agent --name step1 --conf . --conf-file f.config
+
+// Run the flume Avro client
+
+flume-ng avro-client -H localhost -p 11112 -F <<Provide your avro file path here>>
+
+-- wshdfs.conf
+
+# wshdfs.conf
+# To get the data from web server logs to HDFS
+wh.sources = ws
+wh.sinks = hd
+wh.channels = mem
+
+# Describe/configure the source
+wh.sources.ws.type = exec
+wh.sources.ws.command = tail -F /opt/gen_logs/logs/access.log
+
+# Describe the sink
+wh.sinks.hd.type = hdfs
+wh.sinks.hd.hdfs.path = hdfs://nn01.itversity.com:8020/user/dgadiraju/flume_demo
+
+wh.sinks.hd.hdfs.filePrefix = FlumeDemo
+wh.sinks.hd.hdfs.fileSuffix = .txt
+wh.sinks.hd.hdfs.rollInterval = 120
+wh.sinks.hd.hdfs.rollSize = 1048576
+wh.sinks.hd.hdfs.rollCount = 100
+wh.sinks.hd.hdfs.fileType = DataStream
+
+# Use a channel which buffers events in memory
+wh.channels.mem.type = memory
+wh.channels.mem.capacity = 1000
+wh.channels.mem.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+wh.sources.ws.channels = mem
+wh.sinks.hd.channel = mem
+
+--flume-spark-hdfs-multiplex.conf
+
+# flumeexecdemo.conf: A single-node Flume configuration to read data from log file
+
+# Name the components on this agent
+fed.sources = retail
+fed.sinks = hd spark
+fed.channels = mem sparkmem
+
+# Describe/configure the source
+fed.sources.retail.type = exec
+fed.sources.retail.command = tail -F /opt/gen_logs/logs/access.log
+
+# Describe the sink
+fed.sinks.hd.type = hdfs
+fed.sinks.hd.hdfs.path = hdfs://nn01.itversity.com:8020/user/dgadiraju/execdemo/retail_%Y-%m-%d
+fed.sinks.hd.hdfs.filePrefix = LogMessages
+fed.sinks.hd.hdfs.rollInterval = 120
+fed.sinks.hd.hdfs.rollSize = 1048576
+fed.sinks.hd.hdfs.rollCount = 100
+fed.sinks.hd.hdfs.fileType = DataStream
+fed.sinks.hd.hdfs.useLocalTimeStamp = true
+
+# Use a channel which buffers events in memory
+fed.channels.mem.type = memory
+fed.channels.mem.capacity = 1000
+fed.channels.mem.transactionCapacity = 100
+
+fed.sinks.spark.type = org.apache.spark.streaming.flume.sink.SparkSink
+fed.sinks.spark.hostname = gw01.itversity.com
+fed.sinks.spark.port = 19999
+
+fed.channels.sparkmem.type = memory
+fed.channels.sparkmem.capacity = 1000
+fed.channels.sparkmem.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+fed.sources.retail.channels = mem sparkmem
+fed.sinks.hd.channel = mem
+fed.sinks.spark.channel = sparkmem
+

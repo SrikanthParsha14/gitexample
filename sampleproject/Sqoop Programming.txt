@@ -1,0 +1,466 @@
+--sqoop-review.sh
+
+sqoop list-databases \
+  --connect "jdbc:mysql://nn01.namenode.com:3306" \
+  --username retail_dba \
+  --password srikanth
+
+#Make sure there is no directory specified in target-dir
+#Also make sure you replace dgadiraju with appropriate user name
+#For Cloudera or Hortonworks based VM environments you can change nn01.namenode.com
+  #to appropriate host names or localhost
+sqoop import \
+  --connect "jdbc:mysql://nn01.namenode.com:3306/retail_db" \
+  --username=retail_dba \
+  --password=srikanth \
+  --table srikanth \
+  --target-dir=/user/dgadiraju/demo/srikanth
+  
+--cca175-problem-06-import.sh
+sqoop import-all-tables \
+  --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --username retail_dba \
+  --password cloudera \
+  --warehouse-dir /user/hive/warehouse/problem6.db \
+  --hive-import \
+  --hive-database problem6 \
+  --create-hive-table \
+  --as-textfile
+  
+--cca175-problem-5-step-5-sqoop-job.sh
+
+// On terminal -
+
+sqoop job --create first_sqoop_job \
+  -- import \
+  --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+  --username "retail_dba" \
+  --password "cloudera" \
+  --table products_replica \
+  --target-dir /user/cloudera/problem5/products-incremental \
+  --check-column product_id \
+  --incremental append \
+  --last-value 0;
+
+sqoop job --exec first_sqoop_job
+
+// On MySQL command line -
+
+insert into products_replica 
+  values (1346,2,'something 1','something 2',300.00,'not avaialble',3,'STRONG');
+insert into products_replica 
+  values (1347,5,'something 787','something 2',356.00,'not avaialble',3,'STRONG');
+
+// On terminal - 
+
+sqoop job --exec first_sqoop_job
+
+// On MYSQL Command Line
+
+insert into products_replica 
+  values (1376,4,'something 1376','something 2',1.00,'not avaialble',3,'WEAK');
+insert into products_replica 
+  values (1365,4,'something 1376','something 2',10.00,'not avaialble',null,'NOT APPLICABLE');
+
+// On terminal - 
+
+sqoop job --exec first_sqoop_job
+
+--cca175-problem-5-step-4-sqoop-merge.sh
+
+sqoop merge \
+--class-name products_replica \
+--jar-file /tmp/sqoop-cloudera/compile/66b4f23796be7625138f2171a7331cd3/products_replica.jar \
+--new-data /user/cloudera/problem5/products-text-part2 \
+--onto /user/cloudera/problem5/products-text-part1 \
+--target-dir /user/cloudera/problem5/products-text-both-parts \
+--merge-key product_id;
+
+--cca175-problem-5-step-3-sqoop-import.sh
+
+sqoop import \
+--connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+--username retail_dba \
+--password cloudera \
+--table products_replica \
+--target-dir  /user/cloudera/problem5/products-text-part2  \
+--fields-terminated-by '*' \
+--lines-terminated-by '\n' \
+--null-non-string -1000 \
+--null-string "NA" \
+-m 5 \
+--where "product_id > 1111 " \
+--outdir /home/cloudera/sqoop3 \
+--boundary-query "select min(product_id), max(product_id) from products_replica where product_id > 1111"
+
+--cca175-problem-5-step-2-sqoop-import.sh
+
+sqoop import \
+--connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+--username retail_dba \
+--password cloudera \
+--table products_replica \
+--target-dir  /user/cloudera/problem5/products-text-part1  \
+--fields-terminated-by '*' \
+--lines-terminated-by '\n' \
+--null-non-string -1000 \
+--null-string "NA" \
+-m 2 \
+--where "product_id <= 1111 " \
+--outdir /home/cloudera/sqoop2 \
+--boundary-query "select min(product_id), max(product_id) from products_replica where product_id <= 1111";
+
+--cca175-problem-5-step-1-sqoop-import.sh
+
+sqoop import \
+--connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+--username retail_dba \
+--password cloudera \
+--table products_replica \
+--target-dir /user/cloudera/problem5/products-text \
+--fields-terminated-by '|' \
+--lines-terminated-by '\n' \
+--null-non-string -1 \
+--null-string "NOT-AVAILABLE" \
+-m 3 \
+--where "product_id between 1 and 1000" \
+--outdir /home/cloudera/sqoop1 \
+--boundary-query "select min(product_id), max(product_id) from products_replica where product_id between 1 and 1000";
+
+--cca175-problem-03-import-all-tables.sh
+sqoop import-all-tables \
+--connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+--username retail_dba \
+--password cloudera \
+--warehouse-dir /user/hive/warehouse/retail_stage.db \
+--compress \
+--compression-codec snappy \
+--as-avrodatafile
+-m 1;
+
+--cca175-problem-02-sqoop-and-hdfs.sh
+// Step 1
+sqoop import \
+--connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+--username retail_dba \
+--password cloudera \
+--table products \
+--as-textfile \
+--target-dir /user/cloudera/products \
+--fields-terminated-by '|';
+
+// Step 2
+hadoop fs -mkdir /user/cloudera/problem2/
+hadoop fs -mkdir /user/cloudera/problem2/products
+hadoop fs -mv /user/cloudera/products/* /user/cloudera/problem2/products/
+
+// Step 3
+//Read is 4, Write is 2 and execute is 1. 
+//ReadWrite,Execute = 4 + 2 + 1 = 7
+//Read,Write = 4+2 = 6
+//Read ,Execute=4+1=5
+
+hadoop fs -chmod 765 /user/cloudera/problem2/products/*
+
+--create-mysql-table-for-sqoop-export
+
+// login to MYSQL using below : mysql -h localhost -u retail_dba -p
+//    (when prompted password use cloudera or any password that you have currently set)
+
+create table retail_db.result(
+  order_date varchar(255) not null,
+  order_status varchar(255) not null, 
+  total_orders int, 
+  total_amount numeric, 
+  constraint pk_order_result primary key (order_date,order_status)
+  ); 
+  
+--export-processed-data-to-mysql.sh
+sqoop export \
+--table result \
+--connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+--username retail_dba \
+--password cloudera \
+--export-dir "/user/cloudera/problem1/result4a-csv" \
+--columns "order_date,order_status,total_amount,total_orders"
+
+--sqoop-import-order-items-avro.sh
+sqoop import \
+--connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+--username retail_dba \
+--password cloudera \
+--table order_items \
+--compress \
+--compression-codec org.apache.hadoop.io.compress.SnappyCodec \
+--target-dir /user/cloudera/problem1/order-items \
+--as-avrodatafile;
+
+--sqoop-import-orders-avro.sh
+sqoop import \
+--connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" \
+--username retail_dba \
+--password cloudera \
+--table orders \
+--compress \
+--compression-codec org.apache.hadoop.io.compress.SnappyCodec \
+--target-dir /user/cloudera/problem1/orders \
+--as-avrodatafile;
+
+--sqoop-list-commands.sh
+sqoop list-databases \
+  --connect jdbc:mysql://ms.itversity.com:3306 \
+  --username retail_user \
+  --password itversity
+
+sqoop list-tables \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity
+  
+--sqoop-eval.sh
+
+sqoop eval \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --query "SELECT * FROM order_items LIMIT 10"
+
+sqoop eval \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --query "INSERT INTO orders VALUES (100000, '2017-10-31 00:00:00.0', 100000, 'DUMMY')"
+
+sqoop eval \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+  --username retail_user \
+  --password itversity \
+  --query "CREATE TABLE dummy (i INT)"
+
+sqoop eval \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+  --username retail_user \
+  --password itversity \
+  --query "INSERT INTO dummy VALUES (1)"
+
+sqoop eval \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+  --username retail_user \
+  --password itversity \
+  --query "SELECT * FROM dummy"
+  
+--sqoop-simple-import-warehouse-dir.sh
+
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db
+  
+--sqoop-simple-import-target-dir.sh
+
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items \
+  --target-dir /user/dgadiraju/sqoop_import/retail_db/order_items
+  
+sqoop import 
+--connect jdbc:mysql://nn01.itversity.com:3306/retail_db 
+--username retail_dba 
+--password itversity 
+--table order_items 
+--target-dir /user/{username}/sqoop_import/retail_db/order_items
+
+--sqoop-managing-directories.sh
+
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --num-mappers 1 \
+  --delete-target-dir
+
+ sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --num-mappers 1 \
+  --append
+  
+--sqoop-split-by.sh
+
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items_nopk \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --split-by order_item_order_id
+  
+#Splitting on text field
+sqoop import \
+  -Dorg.apache.sqoop.splitter.allow_text_splitter=true \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table orders \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --split-by order_status
+  
+--sqoop-import-different-file-formats.sh
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --num-mappers 2 \
+  --as-sequencefile
+  
+--sqoop-import-compression.sh
+
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --num-mappers 2 \
+  --as-textfile \
+  --compress \
+  --compression-codec org.apache.hadoop.io.compress.GzipCodec
+
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --num-mappers 2 \
+  --as-textfile \
+  --compress \
+  --compression-codec org.apache.hadoop.io.compress.SnappyCodec
+
+--sqoop-import-boundary-query.sh
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --boundary-query 'select 100000, 172198'
+
+----sqoop-import-using-query.sh
+
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --target-dir /user/dgadiraju/sqoop_import/retail_db/orders_with_revenue \
+  --num-mappers 2 \
+  --query "select o.*, sum(oi.order_item_subtotal) order_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id and \$CONDITIONS group by o.order_id, o.order_date, o.order_customer_id, o.order_status" \
+  --split-by order_id
+
+--sqoop-import-using-columns.sh
+
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items \
+  --columns order_item_order_id,order_item_id,order_item_subtotal \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --num-mappers 2
+
+--sqoop-import-auto-reset-to-one-mapper.sh
+
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --table order_items_nopk \
+  --warehouse-dir /user/dgadiraju/sqoop_import/retail_db \
+  --autoreset-to-one-mapper
+
+--sqoop-import-delimiters-and-handling-nulls.sh
+
+#Default behavior
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/hr_db \
+  --username hr_user \
+  --password itversity \
+  --table employees \
+  --warehouse-dir /user/dgadiraju/sqoop_import/hr_db
+  
+#Changing default delimiters and nulls
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/hr_db \
+  --username hr_user \
+  --password itversity \
+  --table employees \
+  --warehouse-dir /user/dgadiraju/sqoop_import/hr_db \
+  --null-non-string -1 \
+  --fields-terminated-by "\000" \
+  --lines-terminated-by ":"
+
+--application.properties
+
+[dev]
+db_username = hr_ro
+db_password = itversity
+db_hostname = nn01.itversity.com
+db_name = hr
+
+--sqoop-incremental-load.sh
+# Baseline import
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --target-dir /user/dgadiraju/sqoop_import/retail_db/orders \
+  --num-mappers 2 \
+  --query "select * from orders where \$CONDITIONS and order_date like '2013-%'" \
+  --split-by order_id
+
+# Query can be used to load data based on condition
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --target-dir /user/dgadiraju/sqoop_import/retail_db/orders \
+  --num-mappers 2 \
+  --query "select * from orders where \$CONDITIONS and order_date like '2014-01%'" \
+  --split-by order_id \
+  --append
+
+# where in conjunction with table can be used to get data based up on a condition
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --target-dir /user/dgadiraju/sqoop_import/retail_db/orders \
+  --num-mappers 2 \
+  --table orders \
+  --where "order_date like '2014-02%'" \
+  --append
+
+# Incremental load using arguments specific to incremental load
+sqoop import \
+  --connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+  --username retail_user \
+  --password itversity \
+  --target-dir /user/dgadiraju/sqoop_import/retail_db/orders \
+  --num-mappers 2 \
+  --table orders \
+  --check-column order_date \
+  --incremental append \
+  --last-value '2014-02-28'
+
+--  
